@@ -18,6 +18,7 @@ REFERENCE_FOLDER = config['Paths']['reference_folder']
 
 # Processing section
 IGNORE_MISSING_COLUMNS = config.getboolean('Processing', 'ignore_missing_columns')
+ENABLE_SPECIAL_CODE = config.getboolean('Processing', 'enable_special_code')
 
 # ReferenceSheet section
 REFERENCE_SHEET_NAME = config['ReferenceSheet']['sheet_name']
