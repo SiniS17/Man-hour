@@ -27,9 +27,6 @@ def extract_task_id(row):
     mapping_key = f"SEQ_{seq_prefix}.X_ID"
     seq_id_mapping = SEQ_ID_MAPPINGS.get(mapping_key, "default")
 
-    # Debug: print the mapping lookup
-    # print(f"DEBUG: Seq {seq_no} -> Key: {mapping_key} -> Mapping: {seq_id_mapping}")
-
     if seq_id_mapping == "work_step" or seq_id_mapping == "default":
         task_id = str(row[WORK_STEP_COLUMN])
         return (task_id, True)  # Should check against reference
@@ -43,10 +40,10 @@ def extract_task_id(row):
     elif seq_id_mapping == "ignore":
         # Still parse the work_step, but mark it as "should not check"
         task_id = str(row[WORK_STEP_COLUMN])
-        print(f"Ignoring task ID for Seq. No: {seq_no} (using work_step): {task_id}")
-        return (task_id, False)  # Should NOT check against reference
+        # print(f"Ignoring task ID for Seq. No: {seq_no} (using work_step): {task_id}")
+        return task_id, False  # Should NOT check against reference
 
-    return (None, False)
+    return None, False
 
 
 def convert_planned_mhrs(time_val):
@@ -101,6 +98,7 @@ def calculate_special_code_distribution(df):
 def process_data(input_file_path, reference_ids):
     """
     Main data processing function. This will extract task IDs, validate man-hours, and generate a report.
+    Returns a dictionary with structured data for Excel output.
     """
     # Load the uploaded file
     df = pd.read_excel(input_file_path, engine='openpyxl')
@@ -147,7 +145,6 @@ def process_data(input_file_path, reference_ids):
     high_mhrs_tasks = df[df['Planned Hours'] > HIGH_MHRS_HOURS]
 
     # Check for new task IDs (only for rows that should be checked)
-    # Filter to only check rows where 'Should Check Reference' is True
     rows_to_check = df[df['Should Check Reference'] == True]
     new_task_ids = rows_to_check[~rows_to_check['Task ID'].isin(reference_ids)]['Task ID'].unique()
 
@@ -160,112 +157,20 @@ def process_data(input_file_path, reference_ids):
     if enable_special_code_processing:
         special_code_distribution = calculate_special_code_distribution(df)
 
-    # Create the report
-    report = generate_report(df, high_mhrs_tasks, random_sample, new_task_ids,
-                             special_code_distribution, enable_special_code_processing)
-
-    return report
-
-
-def generate_report(df, high_mhrs_tasks, random_sample, new_task_ids,
-                    special_code_distribution=None, enable_special_code=False):
-    """
-    Generate the formatted report with total hours, high Mhrs tasks, random sample, and new task IDs.
-    Optionally includes special code distribution if enabled.
-    """
-    report = []
-
-    # Total planned man-hours
+    # Calculate total man-hours
     total_mhrs = df['Planned Hours'].sum()
-    report.append("=" * 60)
-    report.append("1. TOTAL PLANNED MAN-HOURS")
-    report.append("=" * 60)
-    report.append(f"Total: {total_mhrs:.2f} hours ({hours_to_hhmm(total_mhrs)})")
 
-    # Special code distribution (if enabled)
-    if enable_special_code and special_code_distribution:
-        report.append("\nDistribution by Special Code:")
-        report.append("-" * 60)
-        report.append(f"{'Special Code':<20} | {'Hours':<12} | {'HH:MM':<10} | {'%':<6}")
-        report.append("-" * 60)
-
-        for code, hours in special_code_distribution.items():
-            code_str = str(code) if pd.notna(code) else "(No Code)"
-            percentage = (hours / total_mhrs * 100) if total_mhrs > 0 else 0
-            time_str = hours_to_hhmm(hours)
-            report.append(f"{code_str:<20} | {hours:>10.2f}h | {time_str:<10} | {percentage:>5.1f}%")
-
-        report.append("-" * 60)
-
-    report.append("")
-
-    # High man-hours tasks
-    report.append("=" * 60)
-    report.append(f"2. TASKS WITH PLANNED MHRS > {HIGH_MHRS_HOURS} HOURS")
-    report.append("=" * 60)
-    report.append(f"Found {len(high_mhrs_tasks)} tasks.")
-    report.append("-" * 60)
-    report.append("| Seq. No. | Planned Mhrs (HH:MM) |")
-    report.append("-" * 60)
-
-    for index, row in high_mhrs_tasks.iterrows():
-        seq_no = str(row[SEQ_NO_COLUMN])
-        planned_hours = row['Planned Hours']
-        planned_time_hhmm = hours_to_hhmm(planned_hours)
-        report.append(f"| {seq_no:<8} | {planned_time_hhmm:>18} |")
-    report.append("-" * 60)
-    report.append("")
-
-    # Random sample report
-    report.append("=" * 60)
-    report.append(f"3. DEBUG SAMPLE REPORT (Random {len(random_sample)} Rows)")
-    report.append("=" * 60)
-
-    if enable_special_code:
-        report.append("| Seq. No. | Special Code | Task ID          | Check? | Planned Mhrs |")
-        report.append("-" * 90)
-        for index, row in random_sample.iterrows():
-            seq_no = str(row[SEQ_NO_COLUMN])
-            special_code = str(row[SPECIAL_CODE_COLUMN]) if pd.notna(row[SPECIAL_CODE_COLUMN]) else "N/A"
-            special_code = special_code[:12]  # Truncate if too long
-            task_id = str(row['Task ID'])[:16]  # Truncate task ID
-            should_check = "Yes" if row['Should Check Reference'] else "No"
-            planned_hours = row['Planned Hours']
-            planned_time_hhmm = hours_to_hhmm(planned_hours)
-            report.append(
-                f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {should_check:<6} | {planned_time_hhmm:>12} |")
-    else:
-        report.append("| Seq. No. | Title                          | Task ID          | Check? | Planned Mhrs |")
-        report.append("-" * 95)
-        for index, row in random_sample.iterrows():
-            seq_no = str(row[SEQ_NO_COLUMN])
-            title = str(row[TITLE_COLUMN])[:30]  # Truncate title
-            task_id = str(row['Task ID'])[:16]  # Truncate task ID
-            should_check = "Yes" if row['Should Check Reference'] else "No"
-            planned_hours = row['Planned Hours']
-            planned_time_hhmm = hours_to_hhmm(planned_hours)
-            report.append(
-                f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {should_check:<6} | {planned_time_hhmm:>12} |")
-
-    report.append("-" * 90)
-    report.append("")
-
-    # New Task IDs
-    report.append("=" * 60)
-    report.append("4. NEW TASK IDs (Not in Reference)")
-    report.append("=" * 60)
-    if len(new_task_ids) > 0:
-        report.append(f"Found {len(new_task_ids)} new task IDs")
-        report.append("-" * 60)
-        for task_id in new_task_ids:
-            if task_id and task_id != 'nan':  # Filter out None and 'nan' values
-                report.append(f"   - {task_id}")
-        report.append("-" * 60)
-    else:
-        report.append("None found - all task IDs match reference")
-        report.append("-" * 60)
-
-    return "\n".join(report)
+    # Return structured data dictionary matching input_output.py expectations
+    return {
+        'total_mhrs': total_mhrs,
+        'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
+        'special_code_distribution': special_code_distribution,
+        'enable_special_code': enable_special_code_processing,
+        'high_mhrs_tasks': high_mhrs_tasks,
+        'new_task_ids': new_task_ids,
+        'debug_sample': random_sample,  # Changed key name to match input_output.py
+        'high_mhrs_threshold': HIGH_MHRS_HOURS
+    }
 
 
 def hours_to_hhmm(hours):
