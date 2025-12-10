@@ -1,0 +1,134 @@
+--- Man-Hour Processing Report ---
+Input File: Test man hour.xlsx
+Processing Date: 2025-12-09 18:23:57
+----------------------------------------
+1. Total Planned Man-Hours:
+   Total Planned Mhrs: 1004.10 hours
+----------------------------------------
+2. Tasks with Planned Mhrs > 16 hours:
+   Found 20 tasks.
+   -----------------------------------
+   | Seq. No. | Planned Mhrs (HH:MM) |
+   -----------------------------------
+   | 4.38     |              18:00 |
+   | 4.39     |              49:30 |
+   | 4.4      |              23:00 |
+   | 4.41     |              23:00 |
+   | 4.42     |              23:00 |
+   | 4.43     |              23:00 |
+   | 7.3      |             105:57 |
+   | 7.4      |              46:20 |
+   | 7.5      |              21:11 |
+   | 7.7      |             106:41 |
+   | 7.8      |             144:41 |
+   | 7.9      |              19:12 |
+   | 7.11     |              24:00 |
+   | 7.18     |              28:00 |
+   | 7.2      |              22:30 |
+   | 7.21     |              42:00 |
+   | 7.24     |              20:00 |
+   | 9.1      |              32:00 |
+   | 9.2      |              32:00 |
+   | 9.17     |              32:00 |
+   -----------------------------------
+----------------------------------------
+3. DEBUG SAMPLE REPORT (5 Random Rows):
+   Sample Size: 5
+   --------------------------------------------------
+   | Seq. No. | Original Planned Mhrs | Parsed (HH:MM)|
+   --------------------------------------------------
+   | 9.1      | 0 days 00:00:00       |        00:00 |
+   | 9.24     | 0 days 14:00:00       |        14:00 |
+   | 7.23     | 0 days 12:00:00       |        12:00 |
+   | 9.7      | 0 days 00:00:00       |        00:00 |
+   | 9.25     | 0 days 08:00:00       |        08:00 |
+   --------------------------------------------------
+
+B84 vs C9 Comparison:
+   B84 (Reference): 12-010-00
+   C9 (Uploaded): 12-010-00
+   The values are identical.
+
+New Task IDs:
+NONE
+NONE
+NONE
+NONE
+NONE
+34-CAV-02
+EOD-787-25-00-0014
+EOD-787-78-00-0001
+EOD-787-78-00-0001
+EOD-787-78-00-0001
+EOD-787-78-00-0001
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
+NONE
