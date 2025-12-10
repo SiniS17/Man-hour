@@ -29,8 +29,8 @@ TITLE_COLUMN = config['UploadedSheet']['title']
 WORK_STEP_COLUMN = config['UploadedSheet']['work_step']
 PLANNED_MHRS_COLUMN = config['UploadedSheet']['planned_mhrs']
 
-# SEQ ID Mappings section (new)
-SEQ_ID_MAPPINGS = {key: value for key, value in config.items('SEQ_ID_Mappings')}
+# SEQ ID Mappings section - FIXED: preserve case by converting keys to uppercase
+SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
 
 # Thresholds section
 HIGH_MHRS_HOURS = config.getint('Thresholds', 'high_mhrs_hours')
