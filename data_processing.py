@@ -1,15 +1,9 @@
 import pandas as pd
 
-# Import base required configs
+# Import all required configs including special code
 from config import (SEQ_NO_COLUMN, TITLE_COLUMN, WORK_STEP_COLUMN, PLANNED_MHRS_COLUMN,
-                    HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_ID_MAPPINGS)
-
-# Try to import special code configs - they may not exist if feature is disabled
-try:
-    from config import ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN
-except ImportError:
-    ENABLE_SPECIAL_CODE = False
-    SPECIAL_CODE_COLUMN = None
+                    HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_ID_MAPPINGS,
+                    ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN)
 
 
 def extract_task_id(row):
@@ -41,9 +35,9 @@ def extract_task_id(row):
         # Still parse the work_step, but mark it as "should not check"
         task_id = str(row[WORK_STEP_COLUMN])
         # print(f"Ignoring task ID for Seq. No: {seq_no} (using work_step): {task_id}")
-        return task_id, False  # Should NOT check against reference
+        return (task_id, False)  # Should NOT check against reference
 
-    return None, False
+    return (None, False)
 
 
 def convert_planned_mhrs(time_val):

@@ -161,3 +161,5 @@ cython_debug/
 /OUTPUT
 /LOG
 *.txt
+/OUTPUT/Test man hour
+/INPUT

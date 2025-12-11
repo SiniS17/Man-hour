@@ -29,6 +29,7 @@ SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
 TITLE_COLUMN = config['UploadedSheet']['title']
 WORK_STEP_COLUMN = config['UploadedSheet']['work_step']
 PLANNED_MHRS_COLUMN = config['UploadedSheet']['planned_mhrs']
+SPECIAL_CODE_COLUMN = config['UploadedSheet']['special_code']  # Add this line
 
 # SEQ ID Mappings section - FIXED: preserve case by converting keys to uppercase
 SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
@@ -48,6 +49,8 @@ def print_config():
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Work Step Column: {WORK_STEP_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
+    print(f"Special Code Column: {SPECIAL_CODE_COLUMN}")
+    print(f"Enable Special Code: {ENABLE_SPECIAL_CODE}")
     print(f"High Mhrs Threshold: {HIGH_MHRS_HOURS}")
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
