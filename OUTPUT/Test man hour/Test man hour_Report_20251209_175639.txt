@@ -1,9 +1,0 @@
---- Man-Hour Processing Report ---
-Input File: Test man hour.xlsx
-Processing Date: 2025-12-09 17:56:39
-----------------------------------------
-
-B84 vs C9 Comparison:
-   B84 (Reference): 12-010-00
-   C9 (Uploaded): 12-010-00
-   The values are identical.
