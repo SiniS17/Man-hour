@@ -1,43 +1,78 @@
 import pandas as pd
+import re
 
-# Import all required configs including special code
-from config import (SEQ_NO_COLUMN, TITLE_COLUMN, WORK_STEP_COLUMN, PLANNED_MHRS_COLUMN,
-                    HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_ID_MAPPINGS,
+# Import all required configs
+from config import (SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN,
+                    HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_MAPPINGS, SEQ_ID_MAPPINGS,
                     ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN)
 
 
 def extract_task_id(row):
     """
-    Extracts the task ID based on the 'Seq. No.' and dynamically mapped columns (Title, Work Step, or Ignore).
-    Returns a tuple: (task_id, should_check_reference)
+    Extracts the task ID based on the 'Seq. No.' and dynamically mapped columns.
+    Returns a tuple: (task_id, should_check_reference, should_process)
+    - task_id: The extracted ID
+    - should_check_reference: Whether to check against reference for new IDs
+    - should_process: Whether to include this row in processing at all
     """
     seq_no = str(row[SEQ_NO_COLUMN])
 
     # Extract the SEQ prefix (e.g., "4.39" -> "4")
     seq_prefix = seq_no.split('.')[0]
 
-    # Get the corresponding column or action from SEQ_ID_MAPPINGS
-    # Use uppercase to match the config parser (which lowercases keys by default, but we convert to uppercase)
-    mapping_key = f"SEQ_{seq_prefix}.X_ID"
-    seq_id_mapping = SEQ_ID_MAPPINGS.get(mapping_key, "default")
+    # Get the processing mode from SEQ_MAPPINGS
+    mapping_key = f"SEQ_{seq_prefix}.X"
+    seq_mapping = SEQ_MAPPINGS.get(mapping_key, "true")
 
-    if seq_id_mapping == "work_step" or seq_id_mapping == "default":
-        task_id = str(row[WORK_STEP_COLUMN])
-        return (task_id, True)  # Should check against reference
+    # If set to "ignore", skip this row entirely
+    if seq_mapping == "ignore":
+        return (None, False, False)  # Don't process at all
 
-    elif seq_id_mapping == "title":
-        title = str(row[TITLE_COLUMN])
-        # Extract task ID before the first '/' and remove "-R00" suffix
-        task_id = title.split('/')[0].strip().replace("-R00", "")
-        return (task_id, True)  # Should check against reference
+    # Get the ID extraction method from SEQ_ID_MAPPINGS
+    id_mapping_key = f"SEQ_{seq_prefix}.X_ID"
+    id_extraction_method = SEQ_ID_MAPPINGS.get(id_mapping_key, "/")
 
-    elif seq_id_mapping == "ignore":
-        # Still parse the work_step, but mark it as "should not check"
-        task_id = str(row[WORK_STEP_COLUMN])
-        # print(f"Ignoring task ID for Seq. No: {seq_no} (using work_step): {task_id}")
-        return (task_id, False)  # Should NOT check against reference
+    # Extract the task ID from the title
+    title = str(row[TITLE_COLUMN])
+    task_id = extract_id_from_title(title, id_extraction_method)
 
-    return (None, False)
+    # Determine if we should check reference based on SEQ_MAPPINGS value
+    should_check = (seq_mapping == "true")
+
+    return (task_id, should_check, True)  # Process this row
+
+
+def extract_id_from_title(title, extraction_method):
+    """
+    Extracts the ID from the title based on the extraction method.
+
+    Args:
+        title: The title string
+        extraction_method: Either "-" or "/"
+
+    Returns:
+        The extracted ID string
+    """
+    if extraction_method == "-":
+        # Extract everything before "-" and remove any "(00)" pattern
+        if "-" in title:
+            id_part = title.split("-")[0].strip()
+            # Remove (00) pattern if present
+            id_part = re.sub(r'\s*\(\d+\)\s*', '', id_part)
+            return id_part
+        else:
+            return title.strip()
+
+    elif extraction_method == "/":
+        # Extract everything before the first "/"
+        if "/" in title:
+            return title.split("/")[0].strip()
+        else:
+            return title.strip()
+
+    else:
+        # Default: return the whole title
+        return title.strip()
 
 
 def convert_planned_mhrs(time_val):
@@ -98,7 +133,7 @@ def process_data(input_file_path, reference_ids):
     df = pd.read_excel(input_file_path, engine='openpyxl')
 
     # Build list of required columns based on configuration
-    required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, WORK_STEP_COLUMN, PLANNED_MHRS_COLUMN]
+    required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
 
     # Add special code column to required list if enabled and configured
     if ENABLE_SPECIAL_CODE:
@@ -117,7 +152,7 @@ def process_data(input_file_path, reference_ids):
         enable_special_code_processing = False
 
     # Check for required columns (excluding special code if not found)
-    base_required = [SEQ_NO_COLUMN, TITLE_COLUMN, WORK_STEP_COLUMN, PLANNED_MHRS_COLUMN]
+    base_required = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
     if not all(col in df.columns for col in base_required):
         raise ValueError(f"Missing required columns in the uploaded file. Expected: {base_required}")
 
@@ -128,31 +163,39 @@ def process_data(input_file_path, reference_ids):
     task_id_data = df.apply(extract_task_id, axis=1)
     df['Task ID'] = task_id_data.apply(lambda x: x[0])
     df['Should Check Reference'] = task_id_data.apply(lambda x: x[1])
+    df['Should Process'] = task_id_data.apply(lambda x: x[2])
+
+    # Filter out rows that should not be processed (ignore mode)
+    df_processed = df[df['Should Process'] == True].copy()
+
+    print(f"Total rows: {len(df)}")
+    print(f"Rows to process: {len(df_processed)}")
+    print(f"Rows ignored: {len(df) - len(df_processed)}")
 
     # Debugging: Print rows with None task IDs
-    none_task_ids = df[df['Task ID'].isna()]
+    none_task_ids = df_processed[df_processed['Task ID'].isna()]
     if not none_task_ids.empty:
         print(f"Rows with None Task IDs (Seq. No. and respective rows):")
-        print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, WORK_STEP_COLUMN, 'Task ID']])
+        print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, 'Task ID']])
 
-    # Identify high man-hours tasks
-    high_mhrs_tasks = df[df['Planned Hours'] > HIGH_MHRS_HOURS]
+    # Identify high man-hours tasks (only from processed rows)
+    high_mhrs_tasks = df_processed[df_processed['Planned Hours'] > HIGH_MHRS_HOURS]
 
     # Check for new task IDs (only for rows that should be checked)
-    rows_to_check = df[df['Should Check Reference'] == True]
+    rows_to_check = df_processed[df_processed['Should Check Reference'] == True]
     new_task_ids = rows_to_check[~rows_to_check['Task ID'].isin(reference_ids)]['Task ID'].unique()
 
-    # Generate a random sample for debugging
-    sample_size = min(RANDOM_SAMPLE_SIZE, len(df))
-    random_sample = df.sample(n=sample_size, random_state=1)
+    # Generate a random sample for debugging (only from processed rows)
+    sample_size = min(RANDOM_SAMPLE_SIZE, len(df_processed))
+    random_sample = df_processed.sample(n=sample_size, random_state=1) if len(df_processed) > 0 else pd.DataFrame()
 
-    # Calculate special code distribution if enabled
+    # Calculate special code distribution if enabled (only from processed rows)
     special_code_distribution = None
     if enable_special_code_processing:
-        special_code_distribution = calculate_special_code_distribution(df)
+        special_code_distribution = calculate_special_code_distribution(df_processed)
 
-    # Calculate total man-hours
-    total_mhrs = df['Planned Hours'].sum()
+    # Calculate total man-hours (only from processed rows)
+    total_mhrs = df_processed['Planned Hours'].sum()
 
     # Return structured data dictionary matching input_output.py expectations
     return {
@@ -162,7 +205,7 @@ def process_data(input_file_path, reference_ids):
         'enable_special_code': enable_special_code_processing,
         'high_mhrs_tasks': high_mhrs_tasks,
         'new_task_ids': new_task_ids,
-        'debug_sample': random_sample,  # Changed key name to match input_output.py
+        'debug_sample': random_sample,
         'high_mhrs_threshold': HIGH_MHRS_HOURS
     }
 

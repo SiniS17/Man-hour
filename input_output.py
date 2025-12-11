@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import glob
 from datetime import datetime
-from config import INPUT_FOLDER, OUTPUT_FOLDER
+from config import INPUT_FOLDER, OUTPUT_FOLDER, SEQ_NO_COLUMN, TITLE_COLUMN
 
 
 # Load all Excel files from the input folder
@@ -104,12 +104,18 @@ def create_high_mhrs_sheet(writer, report_data):
     # Add HH:MM formatted column
     high_mhrs_df['Planned Mhrs (HH:MM)'] = high_mhrs_df['Planned Hours'].apply(hours_to_hhmm)
 
-    # Select and order columns - ONLY Seq. No., Title, Task ID, and HH:MM (no "Planned Hours")
-    columns_to_export = ['Seq. No.']
+    # Select and order columns - use configured column names
+    columns_to_export = []
 
-    # Add other useful columns if they exist
-    if 'Title' in high_mhrs_df.columns:
-        columns_to_export.append('Title')
+    # Add SEQ_NO_COLUMN if it exists
+    if SEQ_NO_COLUMN in high_mhrs_df.columns:
+        columns_to_export.append(SEQ_NO_COLUMN)
+
+    # Add TITLE_COLUMN if it exists
+    if TITLE_COLUMN in high_mhrs_df.columns:
+        columns_to_export.append(TITLE_COLUMN)
+
+    # Add Task ID if it exists
     if 'Task ID' in high_mhrs_df.columns:
         columns_to_export.append('Task ID')
 
@@ -180,14 +186,19 @@ def save_debug_log(base_filename, timestamp, report_data):
 
         # Debug sample
         debug_df = report_data['debug_sample']
+
+        if len(debug_df) == 0:
+            f.write("No data to display (all rows were ignored)\n")
+            return
+
         f.write(f"DEBUG SAMPLE REPORT (Random {len(debug_df)} Rows):\n")
         f.write("-" * 90 + "\n")
 
         if report_data['enable_special_code']:
-            f.write("| Seq. No. | Special Code | Task ID          | Check? | Planned Mhrs |\n")
+            f.write(f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Check? | Planned Mhrs |\n")
             f.write("-" * 90 + "\n")
             for index, row in debug_df.iterrows():
-                seq_no = str(row['Seq. No.'])
+                seq_no = str(row[SEQ_NO_COLUMN])
                 special_code = str(row.get('Special code', 'N/A')) if pd.notna(row.get('Special code')) else "N/A"
                 special_code = special_code[:12]
                 task_id = str(row['Task ID'])[:16]
@@ -197,11 +208,11 @@ def save_debug_log(base_filename, timestamp, report_data):
                 f.write(
                     f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {should_check:<6} | {planned_time_hhmm:>12} |\n")
         else:
-            f.write("| Seq. No. | Title                          | Task ID          | Check? | Planned Mhrs |\n")
+            f.write(f"| {SEQ_NO_COLUMN:<8} | {TITLE_COLUMN[:30]:<30} | Task ID          | Check? | Planned Mhrs |\n")
             f.write("-" * 95 + "\n")
             for index, row in debug_df.iterrows():
-                seq_no = str(row['Seq. No.'])
-                title = str(row['Title'])[:30]
+                seq_no = str(row[SEQ_NO_COLUMN])
+                title = str(row[TITLE_COLUMN])[:30]
                 task_id = str(row['Task ID'])[:16]
                 should_check = "Yes" if row['Should Check Reference'] else "No"
                 planned_hours = row['Planned Hours']
