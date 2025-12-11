@@ -24,9 +24,13 @@ def save_output_file(input_file_name, report_data):
             - 'total_mhrs': float
             - 'total_mhrs_hhmm': str
             - 'special_code_distribution': dict or None
+            - 'special_code_per_day': dict or None
+            - 'workpack_days': int or None
+            - 'start_date': datetime or None
+            - 'end_date': datetime or None
             - 'enable_special_code': bool
             - 'high_mhrs_tasks': DataFrame
-            - 'new_task_ids': list
+            - 'new_task_ids_with_seq': DataFrame
             - 'debug_sample': DataFrame
             - 'high_mhrs_threshold': int
     """
@@ -57,25 +61,49 @@ def save_output_file(input_file_name, report_data):
 
 
 def create_total_mhrs_sheet(writer, report_data):
-    """Create the Total Man-Hours sheet with Special Code distribution"""
+    """Create the Total Man-Hours sheet with Special Code distribution and average per day"""
     data = []
 
     total_hours = report_data['total_mhrs']
     total_time_str = hours_to_hhmm(total_hours)
+    workpack_days = report_data.get('workpack_days')
+    start_date = report_data.get('start_date')
+    end_date = report_data.get('end_date')
 
-    # Always use table format, with or without special code
-    data.append(['Special Code', 'Hours (HH:MM)', 'Distribution (%)'])
+    # Add workpack information header if available
+    if start_date and end_date and workpack_days:
+        data.append(['Workpack Period:', f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+                     f"{workpack_days} days", ''])
+        data.append(['', '', '', ''])  # Empty row for spacing
+
+    # Add column headers
+    if workpack_days:
+        data.append(['Special Code', 'Hours (HH:MM)', 'Avg Hours/Day (HH:MM)', 'Distribution (%)'])
+    else:
+        data.append(['Special Code', 'Hours (HH:MM)', 'Distribution (%)'])
+
     if report_data['enable_special_code'] and report_data['special_code_distribution']:
+        special_code_per_day = report_data.get('special_code_per_day', {})
 
         # Add each special code row
         for code, hours in report_data['special_code_distribution'].items():
             code_str = str(code) if pd.notna(code) else "(No Code)"
             percentage = (hours / total_hours * 100) if total_hours > 0 else 0
             time_str = hours_to_hhmm(hours)
-            data.append([code_str, time_str, f"{percentage:.1f}%"])
+
+            if workpack_days and code in special_code_per_day:
+                avg_per_day_str = hours_to_hhmm(special_code_per_day[code])
+                data.append([code_str, time_str, avg_per_day_str, f"{percentage:.1f}%"])
+            else:
+                data.append([code_str, time_str, f"{percentage:.1f}%"])
 
     # Add Total row at the end
-    data.append(['Total', total_time_str, '100.0%'])
+    if workpack_days:
+        avg_total_per_day = total_hours / workpack_days if workpack_days > 0 else 0
+        avg_total_str = hours_to_hhmm(avg_total_per_day)
+        data.append(['Total', total_time_str, avg_total_str, '100.0%'])
+    else:
+        data.append(['Total', total_time_str, '100.0%'])
 
     # Create DataFrame and write to Excel
     df = pd.DataFrame(data)
@@ -138,28 +166,40 @@ def create_high_mhrs_sheet(writer, report_data):
 
 
 def create_new_task_ids_sheet(writer, report_data):
-    """Create the New Task IDs sheet"""
-    new_task_ids = report_data['new_task_ids']
+    """Create the New Task IDs sheet with SEQ numbers"""
+    new_task_ids_df = report_data['new_task_ids_with_seq']
 
-    if len(new_task_ids) == 0:
+    if len(new_task_ids_df) == 0:
         # Create empty sheet with message
         df = pd.DataFrame([['No new task IDs found - all task IDs match reference']])
         df.to_excel(writer, sheet_name='New Task IDs', index=False, header=False)
         return
 
     # Filter out None and 'nan' values
-    filtered_ids = [tid for tid in new_task_ids if tid and str(tid) != 'nan']
+    filtered_df = new_task_ids_df[
+        new_task_ids_df['Task ID'].notna() &
+        (new_task_ids_df['Task ID'].astype(str) != 'nan')
+        ].copy()
 
-    # Create DataFrame
-    df = pd.DataFrame({'New Task ID': filtered_ids})
+    if len(filtered_df) == 0:
+        df = pd.DataFrame([['No new task IDs found - all task IDs match reference']])
+        df.to_excel(writer, sheet_name='New Task IDs', index=False, header=False)
+        return
+
+    # Rename columns for clarity
+    filtered_df.columns = ['SEQ', 'New Task ID']
 
     # Write to Excel
-    df.to_excel(writer, sheet_name='New Task IDs', index=False)
+    filtered_df.to_excel(writer, sheet_name='New Task IDs', index=False)
 
-    # Auto-adjust column width
+    # Auto-adjust column widths
     worksheet = writer.sheets['New Task IDs']
-    max_length = max(df['New Task ID'].astype(str).apply(len).max(), len('New Task ID'))
-    worksheet.column_dimensions['A'].width = max_length + 2
+    for idx, col in enumerate(filtered_df.columns):
+        max_length = max(
+            filtered_df[col].astype(str).apply(len).max(),
+            len(str(col))
+        )
+        worksheet.column_dimensions[chr(65 + idx)].width = max_length + 2
 
 
 def save_debug_log(base_filename, timestamp, report_data):
@@ -182,6 +222,13 @@ def save_debug_log(base_filename, timestamp, report_data):
         f.write("=" * 60 + "\n")
         f.write(f"File: {base_filename}\n")
         f.write(f"Processing Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        # Add workpack info if available
+        if report_data.get('start_date') and report_data.get('end_date'):
+            f.write(
+                f"Workpack Period: {report_data['start_date'].strftime('%Y-%m-%d')} to {report_data['end_date'].strftime('%Y-%m-%d')}\n")
+            f.write(f"Workpack Duration: {report_data.get('workpack_days', 'N/A')} days\n")
+
         f.write("=" * 60 + "\n\n")
 
         # Debug sample

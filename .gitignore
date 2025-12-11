@@ -163,3 +163,4 @@ cython_debug/
 *.txt
 /OUTPUT/Test man hour
 /INPUT
+/REFERENCE

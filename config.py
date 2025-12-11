@@ -20,9 +20,16 @@ REFERENCE_FOLDER = config['Paths']['reference_folder']
 IGNORE_MISSING_COLUMNS = config.getboolean('Processing', 'ignore_missing_columns')
 ENABLE_SPECIAL_CODE = config.getboolean('Processing', 'enable_special_code')
 
-# ReferenceSheet section
-REFERENCE_SHEET_NAME = config['ReferenceSheet']['sheet_name']
-REFERENCE_ID_COLUMN = config['ReferenceSheet']['id_column']
+# ReferenceSheet section - Task sheet
+REFERENCE_TASK_SHEET_NAME = config['ReferenceSheet']['task_sheet_name']
+REFERENCE_TASK_ID_COLUMN = config['ReferenceSheet']['task_id_column']
+
+# ReferenceSheet section - EO sheet
+REFERENCE_EO_SHEET_NAME = config['ReferenceSheet']['eo_sheet_name']
+REFERENCE_EO_ID_COLUMN = config['ReferenceSheet']['eo_id_column']
+
+# EO prefix for identification
+REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
@@ -45,8 +52,12 @@ def print_config():
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Reference file: {REFERENCE_FILE}")
-    print(f"Reference Sheet Name: {REFERENCE_SHEET_NAME}")
-    print(f"Reference ID Column: {REFERENCE_ID_COLUMN}")
+    print(f"Reference folder: {REFERENCE_FOLDER}")
+    print(f"Reference Task Sheet Name: {REFERENCE_TASK_SHEET_NAME}")
+    print(f"Reference Task ID Column: {REFERENCE_TASK_ID_COLUMN}")
+    print(f"Reference EO Sheet Name: {REFERENCE_EO_SHEET_NAME}")
+    print(f"Reference EO ID Column: {REFERENCE_EO_ID_COLUMN}")
+    print(f"EO Prefix: {REFERENCE_EO_PREFIX}")
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
