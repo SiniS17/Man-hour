@@ -5,7 +5,7 @@ import re
 from config import (SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN,
                     HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_MAPPINGS, SEQ_ID_MAPPINGS,
                     ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN,
-                    REFERENCE_EO_PREFIX)
+                    REFERENCE_EO_PREFIX, get_seq_coefficient)
 
 
 def extract_task_id(row):
@@ -101,7 +101,7 @@ def calculate_special_code_distribution(df):
     Returns a sorted dictionary of {special_code: total_hours}
     """
     # Group by special code and sum the planned hours
-    special_code_groups = df.groupby(SPECIAL_CODE_COLUMN)['Planned Hours'].sum()
+    special_code_groups = df.groupby(SPECIAL_CODE_COLUMN)['Adjusted Hours'].sum()
 
     # Sort by hours (descending) and convert to dictionary
     special_code_dict = special_code_groups.sort_values(ascending=False).to_dict()
@@ -164,8 +164,12 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     else:
         print("Warning: Start_date and/or End_date columns not found in the file")
 
-    # Convert "Planned Mhrs" (now in minutes) to total hours
-    df['Planned Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
+    # Convert "Planned Mhrs" (now in minutes) to base hours
+    df['Base Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
+
+    # Apply SEQ coefficient to get adjusted hours
+    df['Coefficient'] = df[SEQ_NO_COLUMN].apply(get_seq_coefficient)
+    df['Adjusted Hours'] = df['Base Hours'] * df['Coefficient']
 
     # Extract task IDs and check flags
     task_id_data = df.apply(extract_task_id, axis=1)
@@ -184,14 +188,25 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     print(f"Rows to process (after removing duplicates): {len(df_processed)}")
     print(f"Rows ignored: {len(df) - len(df_processed)}")
 
+    # Show coefficient application summary
+    coefficient_summary = df_processed.groupby('Coefficient').agg({
+        SEQ_NO_COLUMN: 'count',
+        'Base Hours': 'sum',
+        'Adjusted Hours': 'sum'
+    }).rename(columns={SEQ_NO_COLUMN: 'Count'})
+
+    print("\nCoefficient Application Summary:")
+    print(coefficient_summary)
+    print()
+
     # Debugging: Print rows with None task IDs
     none_task_ids = df_processed[df_processed['Task ID'].isna()]
     if not none_task_ids.empty:
         print(f"Rows with None Task IDs (Seq. No. and respective rows):")
         print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, 'Task ID']])
 
-    # Identify high man-hours tasks (only from processed rows)
-    high_mhrs_tasks = df_processed[df_processed['Planned Hours'] > HIGH_MHRS_HOURS]
+    # Identify high man-hours tasks (only from processed rows, using adjusted hours)
+    high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
 
     # Check for new task IDs (only for rows that should be checked)
     # Now check against appropriate reference based on ID prefix
@@ -215,7 +230,7 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     sample_size = min(RANDOM_SAMPLE_SIZE, len(df_processed))
     random_sample = df_processed.sample(n=sample_size, random_state=1) if len(df_processed) > 0 else pd.DataFrame()
 
-    # Calculate special code distribution if enabled (only from processed rows)
+    # Calculate special code distribution if enabled (only from processed rows, using adjusted hours)
     special_code_distribution = None
     special_code_per_day = None
     if enable_special_code_processing:
@@ -224,13 +239,19 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
         if workpack_days and workpack_days > 0:
             special_code_per_day = {code: hours / workpack_days for code, hours in special_code_distribution.items()}
 
-    # Calculate total man-hours (only from processed rows)
-    total_mhrs = df_processed['Planned Hours'].sum()
+    # Calculate total man-hours using ADJUSTED hours (with coefficient applied)
+    total_mhrs = df_processed['Adjusted Hours'].sum()
+    total_base_mhrs = df_processed['Base Hours'].sum()
+
+    print(f"Total Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
+    print(f"Total Adjusted Man-Hours (with coefficients): {hours_to_hhmm(total_mhrs)}")
 
     # Return structured data dictionary matching input_output.py expectations
     return {
         'total_mhrs': total_mhrs,
+        'total_base_mhrs': total_base_mhrs,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
+        'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
         'workpack_days': workpack_days,

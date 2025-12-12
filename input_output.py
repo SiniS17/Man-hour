@@ -21,8 +21,10 @@ def save_output_file(input_file_name, report_data):
     Args:
         input_file_name: Name of the input file
         report_data: Dictionary containing:
-            - 'total_mhrs': float
+            - 'total_mhrs': float (adjusted with coefficients)
+            - 'total_base_mhrs': float (before coefficients)
             - 'total_mhrs_hhmm': str
+            - 'total_base_mhrs_hhmm': str
             - 'special_code_distribution': dict or None
             - 'special_code_per_day': dict or None
             - 'workpack_days': int or None
@@ -65,7 +67,9 @@ def create_total_mhrs_sheet(writer, report_data):
     data = []
 
     total_hours = report_data['total_mhrs']
+    total_base_hours = report_data.get('total_base_mhrs', total_hours)
     total_time_str = hours_to_hhmm(total_hours)
+    total_base_time_str = hours_to_hhmm(total_base_hours)
     workpack_days = report_data.get('workpack_days')
     start_date = report_data.get('start_date')
     end_date = report_data.get('end_date')
@@ -75,6 +79,12 @@ def create_total_mhrs_sheet(writer, report_data):
         data.append(['Workpack Period:', f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
                      f"{workpack_days} days", ''])
         data.append(['', '', '', ''])  # Empty row for spacing
+
+    # Show base vs adjusted totals
+    data.append(['Man-Hours Summary', '', '', ''])
+    data.append(['Base Man-Hours :', total_base_time_str, '', ''])
+    data.append(['MPD Man-Hours :', total_time_str, '', ''])
+    data.append(['', '', '', ''])  # Empty row for spacing
 
     # Add column headers
     if workpack_days:
@@ -120,7 +130,7 @@ def create_total_mhrs_sheet(writer, report_data):
 
 
 def create_high_mhrs_sheet(writer, report_data):
-    """Create the High Man-Hours Tasks sheet with only HH:MM format"""
+    """Create the High Man-Hours Tasks sheet with coefficient info"""
     high_mhrs_df = report_data['high_mhrs_tasks'].copy()
 
     if len(high_mhrs_df) == 0:
@@ -129,10 +139,11 @@ def create_high_mhrs_sheet(writer, report_data):
         df.to_excel(writer, sheet_name='High Man-Hours Tasks', index=False, header=False)
         return
 
-    # Add HH:MM formatted column
-    high_mhrs_df['Planned Mhrs (HH:MM)'] = high_mhrs_df['Planned Hours'].apply(hours_to_hhmm)
+    # Add HH:MM formatted columns for both base and adjusted hours
+    high_mhrs_df['Base Mhrs (HH:MM)'] = high_mhrs_df['Base Hours'].apply(hours_to_hhmm)
+    high_mhrs_df['Adjusted Mhrs (HH:MM)'] = high_mhrs_df['Adjusted Hours'].apply(hours_to_hhmm)
 
-    # Select and order columns - use configured column names
+    # Select and order columns
     columns_to_export = []
 
     # Add SEQ_NO_COLUMN if it exists
@@ -147,8 +158,8 @@ def create_high_mhrs_sheet(writer, report_data):
     if 'Task ID' in high_mhrs_df.columns:
         columns_to_export.append('Task ID')
 
-    # Add HH:MM column at the end
-    columns_to_export.append('Planned Mhrs (HH:MM)')
+    # Add coefficient and hour columns
+    columns_to_export.extend(['Coefficient', 'Base Mhrs (HH:MM)', 'Adjusted Mhrs (HH:MM)'])
 
     export_df = high_mhrs_df[columns_to_export]
 
@@ -229,6 +240,11 @@ def save_debug_log(base_filename, timestamp, report_data):
                 f"Workpack Period: {report_data['start_date'].strftime('%Y-%m-%d')} to {report_data['end_date'].strftime('%Y-%m-%d')}\n")
             f.write(f"Workpack Duration: {report_data.get('workpack_days', 'N/A')} days\n")
 
+        # Add man-hours summary
+        f.write("\nMan-Hours Summary:\n")
+        f.write(f"Base Man-Hours: {report_data.get('total_base_mhrs_hhmm', 'N/A')}\n")
+        f.write(f"Adjusted Man-Hours (with coefficients): {report_data['total_mhrs_hhmm']}\n")
+
         f.write("=" * 60 + "\n\n")
 
         # Debug sample
@@ -239,35 +255,41 @@ def save_debug_log(base_filename, timestamp, report_data):
             return
 
         f.write(f"DEBUG SAMPLE REPORT (Random {len(debug_df)} Rows):\n")
-        f.write("-" * 90 + "\n")
+        f.write("-" * 110 + "\n")
 
         if report_data['enable_special_code']:
-            f.write(f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Check? | Planned Mhrs |\n")
-            f.write("-" * 90 + "\n")
+            f.write(
+                f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Coeff | Base Mhrs | Adjusted Mhrs |\n")
+            f.write("-" * 110 + "\n")
             for index, row in debug_df.iterrows():
                 seq_no = str(row[SEQ_NO_COLUMN])
                 special_code = str(row.get('Special code', 'N/A')) if pd.notna(row.get('Special code')) else "N/A"
                 special_code = special_code[:12]
                 task_id = str(row['Task ID'])[:16]
-                should_check = "Yes" if row['Should Check Reference'] else "No"
-                planned_hours = row['Planned Hours']
-                planned_time_hhmm = hours_to_hhmm(planned_hours)
+                coefficient = row.get('Coefficient', 1.0)
+                base_hours = row.get('Base Hours', 0)
+                adjusted_hours = row.get('Adjusted Hours', 0)
+                base_time_hhmm = hours_to_hhmm(base_hours)
+                adjusted_time_hhmm = hours_to_hhmm(adjusted_hours)
                 f.write(
-                    f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {should_check:<6} | {planned_time_hhmm:>12} |\n")
+                    f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
         else:
-            f.write(f"| {SEQ_NO_COLUMN:<8} | {TITLE_COLUMN[:30]:<30} | Task ID          | Check? | Planned Mhrs |\n")
-            f.write("-" * 95 + "\n")
+            f.write(
+                f"| {SEQ_NO_COLUMN:<8} | {TITLE_COLUMN[:30]:<30} | Task ID          | Coeff | Base Mhrs | Adjusted Mhrs |\n")
+            f.write("-" * 115 + "\n")
             for index, row in debug_df.iterrows():
                 seq_no = str(row[SEQ_NO_COLUMN])
                 title = str(row[TITLE_COLUMN])[:30]
                 task_id = str(row['Task ID'])[:16]
-                should_check = "Yes" if row['Should Check Reference'] else "No"
-                planned_hours = row['Planned Hours']
-                planned_time_hhmm = hours_to_hhmm(planned_hours)
+                coefficient = row.get('Coefficient', 1.0)
+                base_hours = row.get('Base Hours', 0)
+                adjusted_hours = row.get('Adjusted Hours', 0)
+                base_time_hhmm = hours_to_hhmm(base_hours)
+                adjusted_time_hhmm = hours_to_hhmm(adjusted_hours)
                 f.write(
-                    f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {should_check:<6} | {planned_time_hhmm:>12} |\n")
+                    f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
 
-        f.write("-" * 90 + "\n")
+        f.write("-" * 110 + "\n")
 
     print(f"Debug log saved to {log_file_path}")
 

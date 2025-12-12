@@ -43,9 +43,43 @@ SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings'
 # SEQ ID Mappings section - determines how to extract ID from title
 SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
 
+# SEQ Coefficients section - man-hour multipliers for each SEQ prefix
+SEQ_COEFFICIENTS = {}
+DEFAULT_COEFFICIENT = 1.0
+
+if config.has_section('SEQ_Coefficients'):
+    for key, value in config.items('SEQ_Coefficients'):
+        if key == 'default_coefficient':
+            DEFAULT_COEFFICIENT = float(value)
+        else:
+            SEQ_COEFFICIENTS[key.upper()] = float(value)
+
 # Thresholds section
 HIGH_MHRS_HOURS = config.getint('Thresholds', 'high_mhrs_hours')
 RANDOM_SAMPLE_SIZE = config.getint('Thresholds', 'random_sample_size')
+
+
+def get_seq_coefficient(seq_no):
+    """
+    Get the coefficient for a given SEQ number.
+
+    Args:
+        seq_no: SEQ identifier (e.g., "2.1", "3.5", "4.2")
+
+    Returns:
+        float: Coefficient to multiply man-hours by
+    """
+    # Extract the major version (e.g., "2" from "2.1")
+    seq_prefix = str(seq_no).split('.')[0]
+
+    # Look for the coefficient in the config
+    mapping_key = f"SEQ_{seq_prefix}.X"
+
+    if mapping_key in SEQ_COEFFICIENTS:
+        return SEQ_COEFFICIENTS[mapping_key]
+
+    return DEFAULT_COEFFICIENT
+
 
 # Display the configuration (for debugging purposes)
 def print_config():
@@ -67,3 +101,5 @@ def print_config():
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
     print(f"SEQ Mappings: {SEQ_MAPPINGS}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
+    print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")
+    print(f"Default Coefficient: {DEFAULT_COEFFICIENT}")
