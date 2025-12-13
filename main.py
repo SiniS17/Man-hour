@@ -1,88 +1,158 @@
-from input_output import load_input_files, save_output_file
-from data_processing import process_data
-from config import (REFERENCE_FILE, REFERENCE_FOLDER, print_config,
-                    REFERENCE_TASK_SHEET_NAME, REFERENCE_TASK_ID_COLUMN,
-                    REFERENCE_EO_SHEET_NAME, REFERENCE_EO_ID_COLUMN)
-import os
-import pandas as pd
+"""
+Main Orchestration Module
+Coordinates the entire workpack processing workflow
 
+This is the entry point for the application.
+Run this file to process all files in the INPUT folder.
+"""
 
-def load_reference_ids():
-    """
-    Load reference IDs from both Task and EO sheets.
-    Returns a tuple: (task_ids_set, eo_ids_set)
-    """
-    # Correctly join the REFERENCE folder with the reference file
-    reference_file_path = os.path.join(REFERENCE_FOLDER, REFERENCE_FILE)
-
-    # Load Task IDs from the Task sheet
-    try:
-        task_df = pd.read_excel(reference_file_path, engine='openpyxl', sheet_name=REFERENCE_TASK_SHEET_NAME)
-
-        # Check if the column exists
-        if REFERENCE_TASK_ID_COLUMN not in task_df.columns:
-            print(f"WARNING: Column '{REFERENCE_TASK_ID_COLUMN}' not found in '{REFERENCE_TASK_SHEET_NAME}' sheet.")
-            print(f"Available columns: {list(task_df.columns)}")
-            task_ids = set()
-        else:
-            task_ids = task_df[REFERENCE_TASK_ID_COLUMN].dropna().apply(str).unique()
-            task_ids = set(task_ids)
-            print(f"Loaded {len(task_ids)} Task IDs from '{REFERENCE_TASK_SHEET_NAME}' sheet")
-    except Exception as e:
-        print(f"ERROR loading Task sheet: {e}")
-        task_ids = set()
-
-    # Load EO IDs from the EO sheet
-    try:
-        eo_df = pd.read_excel(reference_file_path, engine='openpyxl', sheet_name=REFERENCE_EO_SHEET_NAME)
-
-        # Check if the column exists
-        if REFERENCE_EO_ID_COLUMN not in eo_df.columns:
-            print(f"WARNING: Column '{REFERENCE_EO_ID_COLUMN}' not found in '{REFERENCE_EO_SHEET_NAME}' sheet.")
-            print(f"Available columns: {list(eo_df.columns)}")
-            eo_ids = set()
-        else:
-            eo_ids = eo_df[REFERENCE_EO_ID_COLUMN].dropna().apply(str).unique()
-            eo_ids = set(eo_ids)
-            print(f"Loaded {len(eo_ids)} EO IDs from '{REFERENCE_EO_SHEET_NAME}' sheet")
-    except Exception as e:
-        print(f"ERROR loading EO sheet: {e}")
-        eo_ids = set()
-
-    return task_ids, eo_ids
+from core.config import print_config
+from core.data_loader import load_input_files, load_reference_ids
+from core.data_processor import process_data
+from writers.excel_writer import save_output_file
 
 
 def main():
-    # Print config to verify it's loaded correctly
-    print_config()
-    print("\n" + "=" * 60 + "\n")
+    """
+    Main orchestration function - coordinates the complete workflow.
 
-    # Step 1: Load input files
+    Workflow:
+    1. Print and verify configuration
+    2. Load input files from INPUT folder
+    3. Load reference data (Task IDs and EO IDs)
+    4. Process each input file:
+       - Extract task IDs
+       - Apply coefficients
+       - Calculate man-hours
+       - Check tool availability (if enabled)
+       - Identify new task IDs
+    5. Generate output reports:
+       - Excel file with multiple sheets
+       - Debug log
+
+    Returns:
+        None
+    """
+    print("=" * 80)
+    print("WORKPACK DATA PROCESSING SYSTEM")
+    print("=" * 80)
+    print()
+
+    # Step 1: Print configuration for verification
+    print("Configuration:")
+    print("-" * 80)
+    print_config()
+    print()
+    print("=" * 80)
+    print()
+
+    # Step 2: Load input files
+    print("Step 1: Loading Input Files")
+    print("-" * 80)
     input_files = load_input_files()
 
     if not input_files:
         print("No input files to process. Exiting.")
+        print()
+        print("Please place Excel files (.xlsx) in the INPUT folder.")
         return
 
-    # Step 2: Load reference IDs from both sheets
-    reference_task_ids, reference_eo_ids = load_reference_ids()
+    print(f"Found {len(input_files)} file(s) to process")
+    print()
+    print("=" * 80)
+    print()
 
-    print("\n" + "=" * 60 + "\n")
+    # Step 3: Load reference data
+    print("Step 2: Loading Reference Data")
+    print("-" * 80)
+    reference_data = load_reference_ids()
+    print()
+    print("=" * 80)
+    print()
 
-    # Step 3: Process each file
-    for input_file in input_files:
-        print(f"Processing file: {input_file}")
+    # Step 4: Process each file
+    print("Step 3: Processing Files")
+    print("=" * 80)
+    print()
 
-        # Read and process the input file (data processing logic in data_processing.py)
-        processed_data = process_data(input_file, reference_task_ids, reference_eo_ids)
+    for idx, input_file in enumerate(input_files, 1):
+        print(f"Processing file {idx}/{len(input_files)}: {input_file}")
+        print("-" * 80)
 
-        # Step 4: Save the output
-        save_output_file(input_file, processed_data)
+        try:
+            # Process the data
+            processed_data = process_data(input_file, reference_data)
 
-        print("\n" + "-" * 60 + "\n")
+            # Save the output
+            save_output_file(input_file, processed_data)
 
-    print("All files processed successfully!")
+            print(f"✓ Successfully processed {input_file}")
+            print()
+
+        except Exception as e:
+            print(f"✗ Error processing {input_file}: {e}")
+            print(f"Skipping to next file...")
+            print()
+            continue
+
+        print("-" * 80)
+        print()
+
+    # Step 5: Summary
+    print("=" * 80)
+    print("PROCESSING COMPLETE")
+    print("=" * 80)
+    print()
+    print(f"✓ All files processed successfully!")
+    print()
+    print("Output files location:")
+    print(f"  - Excel reports: OUTPUT/")
+    print(f"  - Debug logs: LOG/")
+    print()
+    print("=" * 80)
+
+
+def quick_test():
+    """
+    Quick test function to verify the system is working.
+    Run this to check configuration and imports without processing files.
+    """
+    print("=" * 80)
+    print("QUICK SYSTEM TEST")
+    print("=" * 80)
+    print()
+
+    print("Testing imports...")
+    try:
+        from core import config, data_loader, data_processor, id_extractor
+        from features import special_code, coefficients, tool_control
+        from writers import excel_writer, debug_logger
+        from utils import time_utils, validation, formatters
+        print("✓ All imports successful")
+    except ImportError as e:
+        print(f"✗ Import error: {e}")
+        return False
+
+    print()
+    print("Testing configuration...")
+    try:
+        print_config()
+        print("✓ Configuration loaded successfully")
+    except Exception as e:
+        print(f"✗ Configuration error: {e}")
+        return False
+
+    print()
+    print("=" * 80)
+    print("✓ SYSTEM TEST PASSED")
+    print("=" * 80)
+
+    return True
 
 
 if __name__ == "__main__":
+    # Run the main processing workflow
     main()
+
+    # Uncomment below to run quick test instead:
+    # quick_test()

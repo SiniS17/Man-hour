@@ -7,9 +7,9 @@ because each row represents a different part requirement.
 """
 
 import pandas as pd
-from config import (SEQ_NO_COLUMN, TITLE_COLUMN,
-                    TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
-                    TOTAL_QTY_COLUMN, ALT_QTY_COLUMN)
+from core.config import (SEQ_NO_COLUMN, TITLE_COLUMN,
+                         TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
+                         TOTAL_QTY_COLUMN, ALT_QTY_COLUMN)
 
 
 def extract_task_id_for_tool_control(row, seq_mappings, seq_id_mappings):

@@ -1,3 +1,8 @@
+"""
+Configuration Module
+Loads and manages all configuration settings from settings.ini
+"""
+
 import configparser
 import os
 
@@ -96,8 +101,8 @@ def get_seq_coefficient(seq_no):
     return DEFAULT_COEFFICIENT
 
 
-# Display the configuration (for debugging purposes)
 def print_config():
+    """Display the configuration (for debugging purposes)"""
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Reference file: {REFERENCE_FILE}")
