@@ -19,6 +19,7 @@ REFERENCE_FOLDER = config['Paths']['reference_folder']
 # Processing section
 IGNORE_MISSING_COLUMNS = config.getboolean('Processing', 'ignore_missing_columns')
 ENABLE_SPECIAL_CODE = config.getboolean('Processing', 'enable_special_code')
+ENABLE_TOOL_CONTROL = config.getboolean('Processing', 'enable_tool_control', fallback=False)
 
 # ReferenceSheet section - Task sheet
 REFERENCE_TASK_SHEET_NAME = config['ReferenceSheet']['task_sheet_name']
@@ -36,6 +37,20 @@ SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
 TITLE_COLUMN = config['UploadedSheet']['title']
 PLANNED_MHRS_COLUMN = config['UploadedSheet']['planned_mhrs']
 SPECIAL_CODE_COLUMN = config['UploadedSheet']['special_code']
+
+# Tool Control Columns section
+TOOL_NAME_COLUMN = None
+TOOL_TYPE_COLUMN = None
+TOOL_PARTNO_COLUMN = None
+TOTAL_QTY_COLUMN = None
+ALT_QTY_COLUMN = None
+
+if config.has_section('ToolControlColumns'):
+    TOOL_NAME_COLUMN = config['ToolControlColumns']['tool_name']
+    TOOL_TYPE_COLUMN = config['ToolControlColumns']['tool_type']
+    TOOL_PARTNO_COLUMN = config['ToolControlColumns']['tool_partno']
+    TOTAL_QTY_COLUMN = config['ToolControlColumns']['total_qty']
+    ALT_QTY_COLUMN = config['ToolControlColumns']['alt_qty']
 
 # SEQ Mappings section - determines how each SEQ prefix should be processed
 SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings')}
@@ -97,6 +112,13 @@ def print_config():
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
     print(f"Special Code Column: {SPECIAL_CODE_COLUMN}")
     print(f"Enable Special Code: {ENABLE_SPECIAL_CODE}")
+    print(f"Enable Tool Control: {ENABLE_TOOL_CONTROL}")
+    if ENABLE_TOOL_CONTROL:
+        print(f"Tool Name Column: {TOOL_NAME_COLUMN}")
+        print(f"Tool Type Column: {TOOL_TYPE_COLUMN}")
+        print(f"Tool Part No Column: {TOOL_PARTNO_COLUMN}")
+        print(f"Total Qty Column: {TOTAL_QTY_COLUMN}")
+        print(f"Alt Qty Column: {ALT_QTY_COLUMN}")
     print(f"High Mhrs Threshold: {HIGH_MHRS_HOURS}")
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
     print(f"SEQ Mappings: {SEQ_MAPPINGS}")

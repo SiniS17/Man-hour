@@ -56,6 +56,10 @@ def save_output_file(input_file_name, report_data):
         # Sheet 3: New Task IDs
         create_new_task_ids_sheet(writer, report_data)
 
+        # Sheet 4: Tool Control (if enabled)
+        if report_data.get('enable_tool_control', False):
+            create_tool_control_sheet(writer, report_data)
+
     print(f"Excel report saved to {output_xlsx_path}")
 
     # Save debug log to LOG folder in root directory
@@ -82,8 +86,8 @@ def create_total_mhrs_sheet(writer, report_data):
 
     # Show base vs adjusted totals
     data.append(['Man-Hours Summary', '', '', ''])
-    data.append(['Base Man-Hours :', total_base_time_str, '', ''])
-    data.append(['MPD Man-Hours :', total_time_str, '', ''])
+    data.append(['Base Man-Hours (before coefficient):', total_base_time_str, '', ''])
+    data.append(['Adjusted Man-Hours (with coefficient):', total_time_str, '', ''])
     data.append(['', '', '', ''])  # Empty row for spacing
 
     # Add column headers
@@ -292,6 +296,37 @@ def save_debug_log(base_filename, timestamp, report_data):
         f.write("-" * 110 + "\n")
 
     print(f"Debug log saved to {log_file_path}")
+
+
+def create_tool_control_sheet(writer, report_data):
+    """Create the Tool Control sheet showing tools/spares with zero availability"""
+    tool_issues_df = report_data.get('tool_control_issues', pd.DataFrame())
+
+    if len(tool_issues_df) == 0:
+        # Create empty sheet with message
+        df = pd.DataFrame([['All tools and spares have adequate availability (quantity > 0)']])
+        df.to_excel(writer, sheet_name='Tool Control', index=False, header=False)
+        return
+
+    # Write to Excel with headers
+    tool_issues_df.to_excel(writer, sheet_name='Tool Control', index=False)
+
+    # Auto-adjust column widths
+    worksheet = writer.sheets['Tool Control']
+    for idx, col in enumerate(tool_issues_df.columns):
+        max_length = max(
+            tool_issues_df[col].astype(str).apply(len).max(),
+            len(str(col))
+        )
+        # Set appropriate width based on column
+        if col == 'Tool/Spare Name':
+            worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 70)
+        elif col == 'Part Number':
+            worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 25)
+        elif col == 'Task ID':
+            worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 30)
+        else:
+            worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 20)
 
 
 def hours_to_hhmm(hours):

@@ -5,7 +5,12 @@ import re
 from config import (SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN,
                     HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE, SEQ_MAPPINGS, SEQ_ID_MAPPINGS,
                     ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN,
+                    ENABLE_TOOL_CONTROL,
                     REFERENCE_EO_PREFIX, get_seq_coefficient)
+
+# Import tool control module if enabled
+if ENABLE_TOOL_CONTROL:
+    from tool_control import process_tool_control
 
 
 def extract_task_id(row):
@@ -164,6 +169,13 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     else:
         print("Warning: Start_date and/or End_date columns not found in the file")
 
+    # Check tool availability if enabled
+    # IMPORTANT: Tool control is processed COMPLETELY SEPARATELY using its own module
+    # It processes ALL rows independently without any deduplication
+    tool_control_issues = pd.DataFrame()
+    if ENABLE_TOOL_CONTROL:
+        tool_control_issues = process_tool_control(input_file_path, SEQ_MAPPINGS, SEQ_ID_MAPPINGS)
+
     # Convert "Planned Mhrs" (now in minutes) to base hours
     df['Base Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
 
@@ -184,7 +196,7 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     # Group by SEQ_NO_COLUMN and keep only the first row for each unique SEQ
     df_processed = df_processed.drop_duplicates(subset=[SEQ_NO_COLUMN], keep='first')
 
-    print(f"Total rows: {len(df)}")
+    print(f"\nTotal rows: {len(df)}")
     print(f"Rows to process (after removing duplicates): {len(df_processed)}")
     print(f"Rows ignored: {len(df) - len(df_processed)}")
 
@@ -243,7 +255,7 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
     total_mhrs = df_processed['Adjusted Hours'].sum()
     total_base_mhrs = df_processed['Base Hours'].sum()
 
-    print(f"Total Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
+    print(f"\nTotal Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
     print(f"Total Adjusted Man-Hours (with coefficients): {hours_to_hhmm(total_mhrs)}")
 
     # Return structured data dictionary matching input_output.py expectations
@@ -258,6 +270,8 @@ def process_data(input_file_path, reference_task_ids, reference_eo_ids):
         'start_date': start_date,
         'end_date': end_date,
         'enable_special_code': enable_special_code_processing,
+        'enable_tool_control': ENABLE_TOOL_CONTROL,
+        'tool_control_issues': tool_control_issues,
         'high_mhrs_tasks': high_mhrs_tasks,
         'new_task_ids_with_seq': new_task_ids_with_seq,
         'debug_sample': random_sample,
