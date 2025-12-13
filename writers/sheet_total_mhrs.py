@@ -25,6 +25,9 @@ def create_total_mhrs_sheet(writer, report_data):
     start_date = report_data.get('start_date')
     end_date = report_data.get('end_date')
 
+    # Track where the data table starts
+    table_start_row = 0
+
     # Add workpack information header if available
     if start_date and end_date and workpack_days:
         data.append(['Workpack Period:', f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
@@ -36,6 +39,9 @@ def create_total_mhrs_sheet(writer, report_data):
     data.append(['Base Man-Hours (before coefficient):', total_base_time_str, '', ''])
     data.append(['Adjusted Man-Hours (with coefficient):', total_time_str, '', ''])
     data.append(['', '', '', ''])  # Empty row for spacing
+
+    # Remember where the table starts (for autofilter)
+    table_start_row = len(data) + 1  # +1 because Excel is 1-indexed
 
     # Add column headers
     if workpack_days:
@@ -70,8 +76,20 @@ def create_total_mhrs_sheet(writer, report_data):
     df = pd.DataFrame(data)
     df.to_excel(writer, sheet_name='Total Man-Hours', index=False, header=False)
 
-    # Auto-adjust column widths
+    # Get the worksheet
     worksheet = writer.sheets['Total Man-Hours']
+
+    # Add autofilter to the data table (starting from the Special Code header row)
+    table_end_row = len(data)
+    num_cols = len(df.columns)
+    if workpack_days:
+        filter_range = f"A{table_start_row}:D{table_end_row}"
+    else:
+        filter_range = f"A{table_start_row}:C{table_end_row}"
+
+    worksheet.auto_filter.ref = filter_range
+
+    # Auto-adjust column widths
     for idx in range(len(df.columns)):
         max_length = max(
             df.iloc[:, idx].astype(str).apply(len).max(),

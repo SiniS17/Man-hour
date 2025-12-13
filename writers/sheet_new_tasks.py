@@ -36,6 +36,12 @@ def create_new_task_ids_sheet(writer, report_data):
     # Write to Excel
     filtered_df.to_excel(writer, sheet_name='New Task IDs', index=False)
 
+    # Get the worksheet
+    worksheet = writer.sheets['New Task IDs']
+
+    # Add autofilter to headers
+    worksheet.auto_filter.ref = worksheet.dimensions
+
     # Auto-adjust column widths
     adjust_column_widths(writer, 'New Task IDs', filtered_df)
 

@@ -35,6 +35,12 @@ def create_high_mhrs_sheet(writer, report_data):
     # Write to Excel
     export_df.to_excel(writer, sheet_name='High Man-Hours Tasks', index=False)
 
+    # Get the worksheet
+    worksheet = writer.sheets['High Man-Hours Tasks']
+
+    # Add autofilter to headers
+    worksheet.auto_filter.ref = worksheet.dimensions
+
     # Auto-adjust column widths
     adjust_column_widths(writer, 'High Man-Hours Tasks', export_df)
 

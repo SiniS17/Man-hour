@@ -25,6 +25,12 @@ def create_tool_control_sheet(writer, report_data):
     # Write to Excel with headers
     tool_issues_df.to_excel(writer, sheet_name='Tool Control', index=False)
 
+    # Get the worksheet
+    worksheet = writer.sheets['Tool Control']
+
+    # Add autofilter to headers
+    worksheet.auto_filter.ref = worksheet.dimensions
+
     # Auto-adjust column widths
     adjust_column_widths(writer, 'Tool Control', tool_issues_df)
 
