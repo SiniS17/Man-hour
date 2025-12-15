@@ -17,7 +17,7 @@ from features.special_code import (calculate_special_code_distribution,
                                    validate_special_code_column)
 from features.coefficients import apply_coefficients_to_dataframe, print_coefficient_summary
 from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
-                                  apply_bonus_hours, get_bonus_hours)
+                                  apply_bonus_hours, get_bonus_hours, get_bonus_breakdown_by_source)
 
 # Import tool control module if enabled
 if ENABLE_TOOL_CONTROL:
@@ -106,8 +106,28 @@ def process_data(input_file_path, reference_data):
     # Calculate total adjusted hours BEFORE bonus
     total_adjusted_mhrs_before_bonus = df_processed['Adjusted Hours'].sum()
 
+    # Calculate coefficient contribution (difference between adjusted and base)
+    coefficient_hours = total_adjusted_mhrs_before_bonus - total_base_mhrs
+
     # Get the bonus hours amount for this aircraft/check combination
     bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
+
+    # Build additional hours breakdown
+    additional_breakdown = {}
+    if bonus_hours > 0:
+        # Try to get the sheet names where bonus was found
+        bonus_sources = report_data.get('bonus_sources', {})
+        for source, hours in bonus_sources.items():
+            if hours > 0:
+                additional_breakdown[source] = hours
+
+        # If no breakdown available, just show total bonus
+        if not additional_breakdown and bonus_hours > 0:
+            # Look up which sheets contributed
+            bonus_lookup_data = load_bonus_hours_lookup()
+            if wp_type in bonus_lookup_data and ac_type in bonus_lookup_data[wp_type]:
+                # Find which sheet(s) this came from by checking the raw data
+                additional_breakdown = get_bonus_breakdown(ac_type, wp_type, bonus_lookup_data)
 
     # Apply bonus hours to dataframe
     df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
@@ -152,7 +172,9 @@ def process_data(input_file_path, reference_data):
     return {
         'total_mhrs': total_mhrs,
         'total_base_mhrs': total_base_mhrs,
+        'coefficient_hours': coefficient_hours,
         'bonus_hours': bonus_hours,
+        'bonus_breakdown': bonus_breakdown,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
         'ac_type': ac_type,
