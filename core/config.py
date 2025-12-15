@@ -41,6 +41,10 @@ REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='bonus_hours.xlsx')
 BONUS_HOURS_SHEET = config.get('ReferenceSheet', 'bonus_hours_sheet', fallback='BonusHours')
 
+# Bonus hours column names
+BONUS_1 = config.get('ReferenceSheet', 'bonus_1', fallback='A')
+BONUS_2 = config.get('ReferenceSheet', 'bonus_2', fallback='B')
+
 # Aircraft type lookup configuration (ADD THESE LINES)
 AC_TYPE_FILE = config.get('ReferenceSheet', 'ac_type_file', fallback='abc.xlsx')
 

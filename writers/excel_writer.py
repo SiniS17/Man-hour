@@ -13,6 +13,7 @@ from .sheet_high_mhrs import create_high_mhrs_sheet
 from .sheet_new_tasks import create_new_task_ids_sheet
 from .sheet_tool_control import create_tool_control_sheet
 from .debug_logger import save_debug_log
+from .sheet_bonus_hours import create_bonus_hours_sheet
 
 
 def load_input_files():
@@ -61,7 +62,10 @@ def save_output_file(input_file_name, report_data):
         # Sheet 3: New Task IDs
         create_new_task_ids_sheet(writer, report_data)
 
-        # Sheet 4: Tool Control (if enabled)
+        # Sheet 4: Bonus Hours (NEW)
+        create_bonus_hours_sheet(writer, report_data)
+
+        # Sheet 5: Tool Control (if enabled)
         if report_data.get('enable_tool_control', False):
             create_tool_control_sheet(writer, report_data)
 

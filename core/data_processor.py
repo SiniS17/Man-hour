@@ -46,7 +46,7 @@ def process_data(input_file_path, reference_data):
     ac_type, wp_type, ac_name = extract_from_dataframe(df)
 
     # Load bonus hours lookup table
-    bonus_lookup = load_bonus_hours_lookup()
+    bonus_lookup, bonus_breakdown = load_bonus_hours_lookup()
 
     # Build list of required columns based on configuration
     required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
@@ -144,8 +144,9 @@ def process_data(input_file_path, reference_data):
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
         'ac_type': ac_type,
-        'ac_name': ac_name,  # ADD THIS LINE
+        'ac_name': ac_name,
         'wp_type': wp_type,
+        'bonus_breakdown': bonus_breakdown,  # ADD THIS LINE
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
         'workpack_days': workpack_info['workpack_days'],

@@ -38,6 +38,8 @@ __all__ = [
     'REFERENCE_EO_PREFIX',
     'get_seq_coefficient',
     'print_config',
+    'BONUS_1',
+    'BONUS_2',
 
     # Data loader exports
     'load_input_files',
