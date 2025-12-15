@@ -1,7 +1,7 @@
 """
 Total Man-Hours Sheet Module
 Generates TWO separate sheets:
-1. Total Man-Hours Summary (bonus breakdown and type coefficient breakdown)
+1. Total Man-Hours Summary (all bonus items including type coefficient)
 2. Special Code Distribution (special code analysis)
 """
 
@@ -30,12 +30,12 @@ def create_total_mhrs_sheet(writer, report_data):
 
 def create_man_hours_summary_sheet(writer, report_data):
     """
-    Create the Total Man-Hours Summary sheet with project info, bonus breakdown, and type coefficient breakdown.
+    Create the Total Man-Hours Summary sheet with project info and bonus breakdown.
 
     Layout:
     1. Project Information Header
     2. Base Man-Hours
-    3. Additional Hours Breakdown (Bonus + Type Coefficient)
+    3. Bonus Hours (including Towing, ERU, Type Coefficients)
     4. Final Total
 
     Args:
@@ -46,8 +46,7 @@ def create_man_hours_summary_sheet(writer, report_data):
 
     total_hours = report_data['total_mhrs']
     total_base_hours = report_data.get('total_base_mhrs', total_hours)
-    bonus_hours = report_data.get('bonus_hours', 0.0)
-    type_coefficient_hours = report_data.get('type_coefficient_hours', 0.0)
+    total_additional = report_data.get('total_additional_hours', 0.0)
 
     workpack_days = report_data.get('workpack_days')
     start_date = report_data.get('start_date')
@@ -72,42 +71,21 @@ def create_man_hours_summary_sheet(writer, report_data):
     data.append(['Base Man-Hours:', hours_to_hhmm(total_base_hours), f"{total_base_hours:.2f}"])
     data.append(['', '', ''])  # Empty row
 
-    # === ADDITIONAL HOURS BREAKDOWN ===
+    # === BONUS HOURS (All Additional Hours) ===
     data.append(['ADDITIONAL HOURS BREAKDOWN', 'HH:MM', 'Hours'])
 
-    additional_total = 0.0
-
-    # 1. Bonus Hours Breakdown
+    # Get combined bonus breakdown (includes towing, ERU, and type coefficients)
     bonus_breakdown = report_data.get('bonus_breakdown', {})
+
     if bonus_breakdown:
-        data.append(['Bonus Hours:', '', ''])
         for source, hours in bonus_breakdown.items():
-            if hours > 0:
+            if abs(hours) > 0.01:  # Show both positive and negative values
+                # Add bullet point for each item
                 data.append([f"  • {source}", hours_to_hhmm(hours), f"{hours:.2f}"])
-                additional_total += hours
-        data.append(['', '', ''])  # Empty row after bonus section
+        data.append(['', '', ''])  # Empty row after bonus items
 
-    # 2. Type Coefficient Breakdown
-    type_coeff_breakdown = report_data.get('type_coeff_breakdown', {})
-    if type_coeff_breakdown:
-        data.append(['Type Coefficient Adjustments:', '', ''])
-        for special_type, info in type_coeff_breakdown.items():
-            additional_hours = info.get('additional_hours', 0)
-            coefficient = info.get('coefficient', 1.0)
-            count = info.get('count', 0)
-            if additional_hours != 0:  # Show both positive and negative adjustments
-                label = f"  • {special_type} (Coeff: {coefficient:.2f}, {count} tasks)"
-                data.append([label, hours_to_hhmm(additional_hours), f"{additional_hours:.2f}"])
-                additional_total += additional_hours
-        data.append(['', '', ''])  # Empty row after type coefficient section
-    elif type_coefficient_hours > 0:
-        # If no breakdown but has coefficient hours, show total
-        data.append(['Type Coefficient Adjustments:', hours_to_hhmm(type_coefficient_hours), f"{type_coefficient_hours:.2f}"])
-        additional_total += type_coefficient_hours
-        data.append(['', '', ''])  # Empty row
-
-    # Subtotal of additional hours
-    data.append(['Total Additional Hours:', hours_to_hhmm(additional_total), f"{additional_total:.2f}"])
+    # Total additional hours
+    data.append(['Total Additional Hours:', hours_to_hhmm(total_additional), f"{total_additional:.2f}"])
     data.append(['', '', ''])  # Empty row
 
     # === FINAL TOTAL ===

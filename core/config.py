@@ -25,6 +25,7 @@ REFERENCE_FOLDER = config['Paths']['reference_folder']
 IGNORE_MISSING_COLUMNS = config.getboolean('Processing', 'ignore_missing_columns')
 ENABLE_SPECIAL_CODE = config.getboolean('Processing', 'enable_special_code')
 ENABLE_TOOL_CONTROL = config.getboolean('Processing', 'enable_tool_control', fallback=False)
+TYPE_COEFFICIENT_PER_SEQ = config.getboolean('Processing', 'type_coefficient_per_seq', fallback=True)
 
 # ReferenceSheet section - Task sheet
 REFERENCE_TASK_SHEET_NAME = config['ReferenceSheet']['task_sheet_name']
@@ -51,9 +52,13 @@ AC_TYPE_TYPE_COLUMN = config.get('ReferenceSheet', 'ac_type_type_column', fallba
 
 # Type coefficient configuration
 TYPE_COEFFICIENT_FILE = config.get('ReferenceSheet', 'type_coefficient_file', fallback='Standard_Work_Coe.xlsx')
-TYPE_COEFF_AIRCRAFT_COLUMN = config.get('ReferenceSheet', 'type_coeff_aircraft_column', fallback='AircraftCode')
-TYPE_COEFF_PRODUCT_COLUMN = config.get('ReferenceSheet', 'type_coeff_product_column', fallback='ProductCode')
+TYPE_COEFF_FUNCTION_COLUMN = config.get('ReferenceSheet', 'type_coeff_function_column', fallback='Function')
 TYPE_COEFF_COLUMN = config.get('ReferenceSheet', 'type_coeff_column', fallback='Coeff')
+
+# Check type mapping (first letter of wp_type -> check type)
+CHECK_TYPE_A = config.get('ReferenceSheet', 'check_type_a', fallback='A-check')
+CHECK_TYPE_C = config.get('ReferenceSheet', 'check_type_c', fallback='C-check')
+CHECK_TYPE_Y = config.get('ReferenceSheet', 'check_type_y', fallback='Y-check')
 
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
@@ -91,6 +96,37 @@ RANDOM_SAMPLE_SIZE = config.getint('Thresholds', 'random_sample_size')
 SHOW_BONUS_HOURS_BREAKDOWN = config.getboolean('Output', 'show_bonus_hours_breakdown', fallback=True)
 
 
+def get_check_type_from_wp_type(wp_type):
+    """
+    Extract check type from wp_type by looking at first letter.
+
+    Args:
+        wp_type: Work package type (e.g., "A06", "C12", "Y01")
+
+    Returns:
+        str: Check type (e.g., "A-check", "C-check", "Y-check")
+
+    Examples:
+        >>> get_check_type_from_wp_type("A06")
+        'A-check'
+        >>> get_check_type_from_wp_type("C12")
+        'C-check'
+    """
+    if not wp_type:
+        return None
+
+    first_letter = str(wp_type)[0].upper()
+
+    if first_letter == 'A':
+        return CHECK_TYPE_A
+    elif first_letter == 'C':
+        return CHECK_TYPE_C
+    elif first_letter == 'Y':
+        return CHECK_TYPE_Y
+    else:
+        return None
+
+
 def print_config():
     """Display the configuration (for debugging purposes)"""
     print(f"Input folder: {INPUT_FOLDER}")
@@ -111,9 +147,12 @@ def print_config():
     print(f"Aircraft Registration Column: {AC_TYPE_REGISTRATION_COLUMN}")
     print(f"Aircraft Type Column: {AC_TYPE_TYPE_COLUMN}")
     print(f"Type Coefficient File: {TYPE_COEFFICIENT_FILE}")
-    print(f"Type Coeff Aircraft Column: {TYPE_COEFF_AIRCRAFT_COLUMN}")
-    print(f"Type Coeff Product Column: {TYPE_COEFF_PRODUCT_COLUMN}")
+    print(f"Type Coeff Function Column: {TYPE_COEFF_FUNCTION_COLUMN}")
     print(f"Type Coefficient Column: {TYPE_COEFF_COLUMN}")
+    print(f"Check Type A: {CHECK_TYPE_A}")
+    print(f"Check Type C: {CHECK_TYPE_C}")
+    print(f"Check Type Y: {CHECK_TYPE_Y}")
+    print(f"Type Coefficient Per SEQ: {TYPE_COEFFICIENT_PER_SEQ}")
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
