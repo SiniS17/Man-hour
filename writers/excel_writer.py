@@ -50,25 +50,36 @@ def save_output_file(input_file_name, report_data):
     # Define output Excel file path
     output_xlsx_path = os.path.join(output_folder, f"{base_filename}_{timestamp}.xlsx")
 
-    # Create Excel writer
-    with pd.ExcelWriter(output_xlsx_path, engine='openpyxl') as writer:
-        # Sheet 1: Total Man-Hours
-        create_total_mhrs_sheet(writer, report_data)
+    # Create Excel writer with explicit engine
+    try:
+        with pd.ExcelWriter(output_xlsx_path, engine='openpyxl') as writer:
+            # Sheet 1 & 2: Total Man-Hours Summary and Special Code Distribution
+            # This function now creates TWO sheets
+            create_total_mhrs_sheet(writer, report_data)
 
-        # Sheet 2: High Man-Hours Tasks
-        create_high_mhrs_sheet(writer, report_data)
+            # Sheet 3: High Man-Hours Tasks
+            create_high_mhrs_sheet(writer, report_data)
 
-        # Sheet 3: New Task IDs
-        create_new_task_ids_sheet(writer, report_data)
+            # Sheet 4: New Task IDs
+            create_new_task_ids_sheet(writer, report_data)
 
-        # Sheet 4: Tool Control (if enabled)
-        if report_data.get('enable_tool_control', False):
-            create_tool_control_sheet(writer, report_data)
+            # Sheet 5: Tool Control (if enabled)
+            if report_data.get('enable_tool_control', False):
+                create_tool_control_sheet(writer, report_data)
 
-    print(f"Excel report saved to {output_xlsx_path}")
+        print(f"✓ Excel report saved to {output_xlsx_path}")
+
+    except Exception as e:
+        print(f"✗ Error saving Excel file: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
     # Save debug log to LOG folder in root directory
-    save_debug_log(base_filename, timestamp, report_data)
+    try:
+        save_debug_log(base_filename, timestamp, report_data)
+    except Exception as e:
+        print(f"Warning: Could not save debug log: {e}")
 
 
 def create_output_folder_structure(base_filename):

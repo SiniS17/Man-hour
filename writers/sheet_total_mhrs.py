@@ -1,6 +1,8 @@
 """
 Total Man-Hours Sheet Module
-Generates the Total Man-Hours sheet with special code distribution and bonus hours breakdown
+Generates TWO separate sheets:
+1. Total Man-Hours Summary (bonus breakdown and totals)
+2. Special Code Distribution (special code analysis)
 """
 
 import pandas as pd
@@ -10,10 +12,31 @@ from core.config import SHOW_BONUS_HOURS_BREAKDOWN
 
 def create_total_mhrs_sheet(writer, report_data):
     """
-    Create the Total Man-Hours sheet with:
+    Create TWO separate sheets:
+    1. Total Man-Hours Summary
+    2. Special Code Distribution
+
+    Args:
+        writer: pd.ExcelWriter object
+        report_data (dict): Dictionary containing processed data
+    """
+    # Sheet 1: Total Man-Hours Summary
+    create_man_hours_summary_sheet(writer, report_data)
+
+    # Sheet 2: Special Code Distribution
+    if report_data.get('enable_special_code'):
+        create_special_code_sheet(writer, report_data)
+
+
+def create_man_hours_summary_sheet(writer, report_data):
+    """
+    Create the Total Man-Hours Summary sheet with project info and bonus breakdown.
+
+    Layout:
     1. Project Information Header
-    2. Addition from (coefficient and bonus) - NO FILTER
-    3. Special Code Distribution - WITH FILTER
+    2. Base Man-Hours
+    3. Additional Hours Breakdown (Bonus + Coefficient)
+    4. Final Total
 
     Args:
         writer: pd.ExcelWriter object
@@ -35,44 +58,86 @@ def create_total_mhrs_sheet(writer, report_data):
     wp_type = report_data.get('wp_type')
 
     # === PROJECT INFORMATION HEADER ===
-    data.append(['Workpack Period:', f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else 'N/A', f"{workpack_days} days" if workpack_days else 'N/A'])
+    data.append(['PROJECT INFORMATION', '', ''])
+    data.append(['Workpack Period:',
+                 f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else 'N/A',
+                 f"{workpack_days} days" if workpack_days else 'N/A'])
     data.append(['Aircraft Registration:', ac_name or 'N/A', ''])
     data.append(['Aircraft Type:', ac_type or 'N/A', ''])
     data.append(['Check Type (WP Type):', wp_type or 'N/A', ''])
-    data.append(['Base Man-Hours:', hours_to_hhmm(total_base_hours), ''])
     data.append(['', '', ''])  # Empty row
 
-    # === ADDITION FROM TABLE (NO FILTER) ===
-    data.append(['Addition from', 'Additional Man-Hour'])
+    # === BASE MAN-HOURS ===
+    data.append(['MAN-HOURS CALCULATION', '', ''])
+    data.append(['Base Man-Hours:', hours_to_hhmm(total_base_hours), f"{total_base_hours:.2f}"])
+    data.append(['', '', ''])  # Empty row
+
+    # === ADDITIONAL HOURS BREAKDOWN ===
+    data.append(['ADDITIONAL HOURS BREAKDOWN', 'HH:MM', 'Hours'])
 
     # Get bonus breakdown by source
     bonus_breakdown = report_data.get('bonus_breakdown', {})
 
+    additional_total = 0.0
+
     # Add each bonus source
-    for source, hours in bonus_breakdown.items():
-        if hours > 0:
-            data.append([source, f"{hours:.1f}"])
+    if bonus_breakdown:
+        for source, hours in bonus_breakdown.items():
+            if hours > 0:
+                data.append([f"  Bonus: {source}", hours_to_hhmm(hours), f"{hours:.2f}"])
+                additional_total += hours
 
     # Add SEQ coefficient row
     if coefficient_hours > 0:
-        data.append(['SEQ coefficient', f"{coefficient_hours:.1f}"])
+        data.append(['  SEQ Coefficient Adjustment', hours_to_hhmm(coefficient_hours), f"{coefficient_hours:.2f}"])
+        additional_total += coefficient_hours
 
-    # Calculate total additional
-    total_additional = sum(bonus_breakdown.values()) + (coefficient_hours if coefficient_hours > 0 else 0)
-    data.append(['Total', f"{total_additional:.1f}"])
+    # Subtotal of additional hours
+    data.append(['Total Additional Hours:', hours_to_hhmm(additional_total), f"{additional_total:.2f}"])
+    data.append(['', '', ''])  # Empty row
 
-    data.append(['', ''])  # Empty row
+    # === FINAL TOTAL ===
+    data.append(['FINAL TOTAL', '', ''])
+    data.append(['Total Man-Hours:', hours_to_hhmm(total_hours), f"{total_hours:.2f}"])
 
-    # Track where special code table starts for filter
-    special_code_start_row = len(data) + 1
+    # Add average per day if workpack days available
+    if workpack_days and workpack_days > 0:
+        avg_per_day = total_hours / workpack_days
+        data.append(['Average Man-Hours per Day:', hours_to_hhmm(avg_per_day), f"{avg_per_day:.2f}"])
 
-    # === SPECIAL CODE DISTRIBUTION TABLE (WITH FILTER) ===
+    # Create DataFrame and write to Excel
+    df = pd.DataFrame(data)
+    df.to_excel(writer, sheet_name='Total Man-Hours Summary', index=False, header=False)
+
+    # Format the worksheet
+    worksheet = writer.sheets['Total Man-Hours Summary']
+
+    # Auto-adjust column widths
+    worksheet.column_dimensions['A'].width = 35
+    worksheet.column_dimensions['B'].width = 20
+    worksheet.column_dimensions['C'].width = 15
+
+
+def create_special_code_sheet(writer, report_data):
+    """
+    Create the Special Code Distribution sheet with filtering capability.
+
+    Args:
+        writer: pd.ExcelWriter object
+        report_data (dict): Dictionary containing processed data
+    """
+    data = []
+
+    total_hours = report_data['total_mhrs']
+    workpack_days = report_data.get('workpack_days')
+
+    # Add header based on whether we have workpack days
     if workpack_days:
-        data.append(['Special Code', 'Hours (HH:MM)', 'Avg Hours/Day (HH:MM)', 'Distribution (%)'])
+        data.append(['Special Code', 'Hours (HH:MM)', 'Hours (Decimal)', 'Avg Hours/Day (HH:MM)', 'Avg Hours/Day (Decimal)', 'Distribution (%)'])
     else:
-        data.append(['Special Code', 'Hours (HH:MM)', 'Distribution (%)'])
+        data.append(['Special Code', 'Hours (HH:MM)', 'Hours (Decimal)', 'Distribution (%)'])
 
-    if report_data['enable_special_code'] and report_data['special_code_distribution']:
+    if report_data['special_code_distribution']:
         special_code_per_day = report_data.get('special_code_per_day', {})
 
         # Add each special code row
@@ -80,83 +145,39 @@ def create_total_mhrs_sheet(writer, report_data):
             code_str = str(code) if pd.notna(code) else "(No Code)"
             percentage = (hours / total_hours * 100) if total_hours > 0 else 0
             time_str = hours_to_hhmm(hours)
+            hours_decimal = f"{hours:.2f}"
 
             if workpack_days and code in special_code_per_day:
-                avg_per_day_str = hours_to_hhmm(special_code_per_day[code])
-                data.append([code_str, time_str, avg_per_day_str, f"{percentage:.1f}%"])
+                avg_per_day = special_code_per_day[code]
+                avg_per_day_str = hours_to_hhmm(avg_per_day)
+                avg_per_day_decimal = f"{avg_per_day:.2f}"
+                data.append([code_str, time_str, hours_decimal, avg_per_day_str, avg_per_day_decimal, f"{percentage:.1f}%"])
             else:
-                data.append([code_str, time_str, f"{percentage:.1f}%"])
+                data.append([code_str, time_str, hours_decimal, f"{percentage:.1f}%"])
 
-    # Add Total row for special codes
+    # Add Total row
     if workpack_days:
         avg_total_per_day = total_hours / workpack_days if workpack_days > 0 else 0
         avg_total_str = hours_to_hhmm(avg_total_per_day)
-        data.append(['Total', hours_to_hhmm(total_hours), avg_total_str, '100.0%'])
+        avg_total_decimal = f"{avg_total_per_day:.2f}"
+        data.append(['TOTAL', hours_to_hhmm(total_hours), f"{total_hours:.2f}", avg_total_str, avg_total_decimal, '100.0%'])
     else:
-        data.append(['Total', hours_to_hhmm(total_hours), '100.0%'])
+        data.append(['TOTAL', hours_to_hhmm(total_hours), f"{total_hours:.2f}", '100.0%'])
 
     # Create DataFrame and write to Excel
     df = pd.DataFrame(data)
-    df.to_excel(writer, sheet_name='Total Man-Hours', index=False, header=False)
+    df.to_excel(writer, sheet_name='Special Code Distribution', index=False, header=False)
 
     # Get the worksheet
-    worksheet = writer.sheets['Total Man-Hours']
+    worksheet = writer.sheets['Special Code Distribution']
 
-    # Add autofilter ONLY to the special code table
-    special_code_end_row = len(data)
-    num_cols = df.shape[1]
-
-    if workpack_days:
-        filter_range = f"A{special_code_start_row}:D{special_code_end_row}"
-    else:
-        filter_range = f"A{special_code_start_row}:C{special_code_end_row}"
-
-    try:
-        worksheet.auto_filter.ref = filter_range
-    except:
-        pass  # Skip if filter fails
+    # Add autofilter to the entire table
+    worksheet.auto_filter.ref = f"A1:{chr(65 + len(data[0]) - 1)}{len(data)}"
 
     # Auto-adjust column widths
-    for idx in range(num_cols):
-        try:
-            max_length = max(
-                df.iloc[:, idx].astype(str).apply(len).max(),
-                15  # Minimum width
-            )
-            col_letter = chr(65 + idx)
-            worksheet.column_dimensions[col_letter].width = min(max_length + 2, 50)
-        except:
-            pass  # Skip if column adjustment fails
-
-
-def format_workpack_header(start_date, end_date, workpack_days):
-    """
-    Format the workpack period header.
-
-    Args:
-        start_date: Start date
-        end_date: End date
-        workpack_days (int): Number of days
-
-    Returns:
-        list: Formatted row for workpack header
-    """
-    date_range = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
-    days_str = f"{workpack_days} days"
-    return ['Workpack Period:', date_range, days_str, '']
-
-
-def calculate_percentage(hours, total_hours):
-    """
-    Calculate percentage of total hours.
-
-    Args:
-        hours (float): Hours for this item
-        total_hours (float): Total hours
-
-    Returns:
-        float: Percentage
-    """
-    if total_hours <= 0:
-        return 0.0
-    return (hours / total_hours) * 100
+    for idx in range(len(data[0])):
+        col_letter = chr(65 + idx)
+        if idx == 0:  # Special Code column
+            worksheet.column_dimensions[col_letter].width = 25
+        else:
+            worksheet.column_dimensions[col_letter].width = 20
