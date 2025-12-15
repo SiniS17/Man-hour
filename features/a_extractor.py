@@ -1,6 +1,6 @@
 """
 A Column Extractor Module
-Extracts a_type and a_check from column A for bonus hours lookup
+Extracts ac_type and wp_type from column A for bonus hours lookup
 """
 
 import pandas as pd
@@ -8,78 +8,78 @@ import os
 from core.config import A_COLUMN, REFERENCE_FOLDER, BONUS_HOURS_FILE, BONUS_HOURS_SHEET
 
 
-def extract_a_type_and_check(value):
+def extract_ac_type_and_check(value):
     """
-    Extract a_type and a_check from a column value.
+    Extract ac_type and wp_type from a column value.
 
     Rules:
-    - a_type: Everything before the first '-'
-    - a_check: Everything after the last '-'
+    - ac_type: Everything before the first '-'
+    - wp_type: Everything after the last '-'
 
     Args:
         value: String value from column A (e.g., "a21-b-c-dee")
 
     Returns:
-        tuple: (a_type, a_check)
+        tuple: (ac_type, wp_type)
 
     Examples:
-        >>> extract_a_type_and_check("a21-b-c-dee")
+        >>> extract_ac_type_and_check("a21-b-c-dee")
         ('a21', 'dee')
-        >>> extract_a_type_and_check("simple-value")
+        >>> extract_ac_type_and_check("simple-value")
         ('simple', 'value')
-        >>> extract_a_type_and_check("no-dash")
+        >>> extract_ac_type_and_check("no-dash")
         ('no', 'dash')
     """
     if pd.isna(value):
-        return (None, None)
+        return None, None
 
     value_str = str(value).strip()
 
     if '-' not in value_str:
         # No dash found, return the whole string for both
-        return (value_str, value_str)
+        return value_str, value_str
 
     # Split by dash
     parts = value_str.split('-')
 
-    # a_type: first part (before first dash)
-    a_type = parts[0].strip()
+    # ac_type: first part (before first dash)
+    ac_type = parts[0].strip()
 
-    # a_check: last part (after last dash)
-    a_check = parts[-1].strip()
+    # wp_type: last part (after last dash)
+    wp_type = parts[-1].strip()
 
-    return (a_type, a_check)
+    return ac_type, wp_type
 
 
 def extract_from_dataframe(df):
     """
-    Extract a_type and a_check from the first row of column A in dataframe.
+    Extract ac_type and wp_type from the first row of column A in dataframe.
     Since all rows in column A are the same, we only need the first row.
 
     Args:
         df: Input DataFrame
 
     Returns:
-        tuple: (a_type, a_check)
+        tuple: (ac_type, wp_type)
     """
     if A_COLUMN not in df.columns:
         print(f"WARNING: Column '{A_COLUMN}' not found in file")
         print(f"Available columns: {list(df.columns)}")
-        return (None, None)
+        return None, None
 
     if len(df) == 0:
         print(f"WARNING: DataFrame is empty, cannot extract from column '{A_COLUMN}'")
-        return (None, None)
+        return None, None
 
     # Get the first value from column A
     first_value = df[A_COLUMN].iloc[0]
 
-    # Extract a_type and a_check
-    a_type, a_check = extract_a_type_and_check(first_value)
+    # Extract ac_type and wp_type
+    ac_type, wp_type = extract_ac_type_and_check(first_value)
 
-    print(f"Extracted from '{A_COLUMN}': a_type='{a_type}', a_check='{a_check}'")
+    print(f"Extracted from '{A_COLUMN}': ac_type='{ac_type}', wp_type='{wp_type}'")
 
-    return (a_type, a_check)
+    return ac_type, wp_type
 
 
 def load_bonus_hours_lookup():
@@ -87,11 +87,11 @@ def load_bonus_hours_lookup():
     Load bonus hours lookup table from REFERENCE folder.
 
     Expected format:
-    - Columns: a_type, a_check, bonus_hours
-    - Each row contains a combination of a_type and a_check with corresponding bonus hours
+    - Columns: ac_type, wp_type, bonus_hours
+    - Each row contains a combination of ac_type and wp_type with corresponding bonus hours
 
     Returns:
-        dict: Nested dictionary {a_type: {a_check: bonus_hours}}
+        dict: Nested dictionary {ac_type: {wp_type: bonus_hours}}
     """
     bonus_file_path = os.path.join(REFERENCE_FOLDER, BONUS_HOURS_FILE)
 
@@ -105,7 +105,7 @@ def load_bonus_hours_lookup():
         df = pd.read_excel(bonus_file_path, sheet_name=BONUS_HOURS_SHEET, engine='openpyxl')
 
         # Check for required columns
-        required_cols = ['a_type', 'a_check', 'bonus_hours']
+        required_cols = ['ac_type', 'wp_type', 'bonus_hours']
         missing_cols = [col for col in required_cols if col not in df.columns]
 
         if missing_cols:
@@ -117,14 +117,14 @@ def load_bonus_hours_lookup():
         bonus_lookup = {}
 
         for idx, row in df.iterrows():
-            a_type = str(row['a_type']).strip()
-            a_check = str(row['a_check']).strip()
+            ac_type = str(row['ac_type']).strip()
+            wp_type = str(row['wp_type']).strip()
             bonus_hours = float(row['bonus_hours'])
 
-            if a_type not in bonus_lookup:
-                bonus_lookup[a_type] = {}
+            if ac_type not in bonus_lookup:
+                bonus_lookup[ac_type] = {}
 
-            bonus_lookup[a_type][a_check] = bonus_hours
+            bonus_lookup[ac_type][wp_type] = bonus_hours
 
         print(f"Loaded bonus hours lookup: {len(df)} entries")
 
@@ -135,13 +135,13 @@ def load_bonus_hours_lookup():
         return {}
 
 
-def get_bonus_hours(a_type, a_check, bonus_lookup):
+def get_bonus_hours(ac_type, wp_type, bonus_lookup):
     """
-    Look up bonus hours for given a_type and a_check.
+    Look up bonus hours for given ac_type and wp_type.
 
     Args:
-        a_type: Type extracted from column A
-        a_check: Check value extracted from column A
+        ac_type: Type extracted from column A
+        wp_type: Check value extracted from column A
         bonus_lookup: Dictionary from load_bonus_hours_lookup()
 
     Returns:
@@ -150,24 +150,24 @@ def get_bonus_hours(a_type, a_check, bonus_lookup):
     if not bonus_lookup:
         return 0.0
 
-    if a_type not in bonus_lookup:
+    if ac_type not in bonus_lookup:
         return 0.0
 
-    if a_check not in bonus_lookup[a_type]:
+    if wp_type not in bonus_lookup[ac_type]:
         return 0.0
 
-    return bonus_lookup[a_type][a_check]
+    return bonus_lookup[ac_type][wp_type]
 
 
-def apply_bonus_hours(df, a_type, a_check, bonus_lookup):
+def apply_bonus_hours(df, ac_type, wp_type, bonus_lookup):
     """
-    Apply bonus hours to the DataFrame based on a_type and a_check.
+    Apply bonus hours to the DataFrame based on ac_type and wp_type.
     Adds bonus hours to 'Adjusted Hours' column.
 
     Args:
         df: DataFrame with 'Adjusted Hours' column
-        a_type: Type extracted from column A
-        a_check: Check value extracted from column A
+        ac_type: Type extracted from column A
+        wp_type: Check value extracted from column A
         bonus_lookup: Dictionary from load_bonus_hours_lookup()
 
     Returns:
@@ -178,12 +178,12 @@ def apply_bonus_hours(df, a_type, a_check, bonus_lookup):
         return df
 
     # Get bonus hours for this combination
-    bonus_hours = get_bonus_hours(a_type, a_check, bonus_lookup)
+    bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
 
     if bonus_hours > 0:
-        print(f"Applying bonus hours: +{bonus_hours:.2f} hours for a_type='{a_type}', a_check='{a_check}'")
+        print(f"Applying bonus hours: +{bonus_hours:.2f} hours for ac_type='{ac_type}', wp_type='{wp_type}'")
         df['Adjusted Hours'] = df['Adjusted Hours'] + bonus_hours
     else:
-        print(f"No bonus hours found for a_type='{a_type}', a_check='{a_check}'")
+        print(f"No bonus hours found for ac_type='{ac_type}', wp_type='{wp_type}'")
 
     return df

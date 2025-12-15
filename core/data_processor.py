@@ -42,8 +42,8 @@ def process_data(input_file_path, reference_data):
     # Extract workpack dates
     workpack_info = extract_workpack_dates(df)
 
-    # Extract a_type and a_check from column A (first row only, since all rows are the same)
-    a_type, a_check = extract_from_dataframe(df)
+    # Extract ac_type and wp_type from column A (first row only, since all rows are the same)
+    ac_type, wp_type = extract_from_dataframe(df)
 
     # Load bonus hours lookup table
     bonus_lookup = load_bonus_hours_lookup()
@@ -78,8 +78,8 @@ def process_data(input_file_path, reference_data):
     # Apply SEQ coefficient to get adjusted hours
     df = apply_coefficients_to_dataframe(df)
 
-    # Apply bonus hours based on a_type and a_check
-    df = apply_bonus_hours(df, a_type, a_check, bonus_lookup)
+    # Apply bonus hours based on ac_type and wp_type
+    df = apply_bonus_hours(df, ac_type, wp_type, bonus_lookup)
 
     # Extract task IDs and check flags
     task_id_data = df.apply(extract_task_id, axis=1)
@@ -143,8 +143,8 @@ def process_data(input_file_path, reference_data):
         'total_base_mhrs': total_base_mhrs,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
-        'a_type': a_type,
-        'a_check': a_check,
+        'ac_type': ac_type,
+        'wp_type': wp_type,
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
         'workpack_days': workpack_info['workpack_days'],
