@@ -103,7 +103,8 @@ def process_data(input_file_path, reference_data):
         print(f"Rows with None Task IDs (Seq. No. and respective rows):")
         print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, 'Task ID']])
 
-    # Calculate total adjusted hours BEFORE bonus
+    # Calculate total base hours and adjusted hours BEFORE bonus
+    total_base_mhrs = df_processed['Base Hours'].sum()
     total_adjusted_mhrs_before_bonus = df_processed['Adjusted Hours'].sum()
 
     # Calculate coefficient contribution (difference between adjusted and base)
@@ -112,29 +113,14 @@ def process_data(input_file_path, reference_data):
     # Get the bonus hours amount for this aircraft/check combination
     bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
 
-    # Build additional hours breakdown
-    additional_breakdown = {}
-    if bonus_hours > 0:
-        # Try to get the sheet names where bonus was found
-        bonus_sources = report_data.get('bonus_sources', {})
-        for source, hours in bonus_sources.items():
-            if hours > 0:
-                additional_breakdown[source] = hours
-
-        # If no breakdown available, just show total bonus
-        if not additional_breakdown and bonus_hours > 0:
-            # Look up which sheets contributed
-            bonus_lookup_data = load_bonus_hours_lookup()
-            if wp_type in bonus_lookup_data and ac_type in bonus_lookup_data[wp_type]:
-                # Find which sheet(s) this came from by checking the raw data
-                additional_breakdown = get_bonus_breakdown(ac_type, wp_type, bonus_lookup_data)
+    # Get bonus breakdown by source (which sheets contributed)
+    bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type)
 
     # Apply bonus hours to dataframe
     df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
 
     # Calculate total man-hours AFTER bonus hours
     total_mhrs = df_processed['Adjusted Hours'].sum()
-    total_base_mhrs = df_processed['Base Hours'].sum()
 
     # Identify high man-hours tasks (using adjusted hours AFTER bonus)
     high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
