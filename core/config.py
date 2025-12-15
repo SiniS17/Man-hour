@@ -41,6 +41,9 @@ REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='bonus_hours.xlsx')
 BONUS_HOURS_SHEET = config.get('ReferenceSheet', 'bonus_hours_sheet', fallback='BonusHours')
 
+# Aircraft type lookup configuration (ADD THESE LINES)
+AC_TYPE_FILE = config.get('ReferenceSheet', 'ac_type_file', fallback='abc.xlsx')
+
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
 TITLE_COLUMN = config['UploadedSheet']['title']
@@ -119,6 +122,7 @@ def print_config():
     print(f"EO Prefix: {REFERENCE_EO_PREFIX}")
     print(f"Bonus Hours File: {BONUS_HOURS_FILE}")
     print(f"Bonus Hours Sheet: {BONUS_HOURS_SHEET}")
+    print(f"Aircraft Type File: {AC_TYPE_FILE}")  # ADD THIS LINE
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")

@@ -43,7 +43,7 @@ def process_data(input_file_path, reference_data):
     workpack_info = extract_workpack_dates(df)
 
     # Extract ac_type and wp_type from column A (first row only, since all rows are the same)
-    ac_type, wp_type = extract_from_dataframe(df)
+    ac_type, wp_type, ac_name = extract_from_dataframe(df)
 
     # Load bonus hours lookup table
     bonus_lookup = load_bonus_hours_lookup()
@@ -144,6 +144,7 @@ def process_data(input_file_path, reference_data):
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
         'ac_type': ac_type,
+        'ac_name': ac_name,  # ADD THIS LINE
         'wp_type': wp_type,
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
