@@ -37,11 +37,16 @@ REFERENCE_EO_ID_COLUMN = config['ReferenceSheet']['eo_id_column']
 # EO prefix for identification
 REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 
+# Bonus hours configuration
+BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='bonus_hours.xlsx')
+BONUS_HOURS_SHEET = config.get('ReferenceSheet', 'bonus_hours_sheet', fallback='BonusHours')
+
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
 TITLE_COLUMN = config['UploadedSheet']['title']
 PLANNED_MHRS_COLUMN = config['UploadedSheet']['planned_mhrs']
 SPECIAL_CODE_COLUMN = config['UploadedSheet']['special_code']
+A_COLUMN = config.get('UploadedSheet', 'a_column', fallback='A')
 
 # Tool Control Columns section
 TOOL_NAME_COLUMN = None
@@ -112,10 +117,13 @@ def print_config():
     print(f"Reference EO Sheet Name: {REFERENCE_EO_SHEET_NAME}")
     print(f"Reference EO ID Column: {REFERENCE_EO_ID_COLUMN}")
     print(f"EO Prefix: {REFERENCE_EO_PREFIX}")
+    print(f"Bonus Hours File: {BONUS_HOURS_FILE}")
+    print(f"Bonus Hours Sheet: {BONUS_HOURS_SHEET}")
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
     print(f"Special Code Column: {SPECIAL_CODE_COLUMN}")
+    print(f"A Column: {A_COLUMN}")
     print(f"Enable Special Code: {ENABLE_SPECIAL_CODE}")
     print(f"Enable Tool Control: {ENABLE_TOOL_CONTROL}")
     if ENABLE_TOOL_CONTROL:
