@@ -16,6 +16,8 @@ from features.special_code import (calculate_special_code_distribution,
                                    calculate_special_code_per_day,
                                    validate_special_code_column)
 from features.coefficients import apply_coefficients_to_dataframe, print_coefficient_summary
+from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
+                                  apply_bonus_hours)
 
 # Import tool control module if enabled
 if ENABLE_TOOL_CONTROL:
@@ -39,6 +41,12 @@ def process_data(input_file_path, reference_data):
 
     # Extract workpack dates
     workpack_info = extract_workpack_dates(df)
+
+    # Extract a_type and a_check from column A (first row only, since all rows are the same)
+    a_type, a_check = extract_from_dataframe(df)
+
+    # Load bonus hours lookup table
+    bonus_lookup = load_bonus_hours_lookup()
 
     # Build list of required columns based on configuration
     required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
@@ -69,6 +77,9 @@ def process_data(input_file_path, reference_data):
 
     # Apply SEQ coefficient to get adjusted hours
     df = apply_coefficients_to_dataframe(df)
+
+    # Apply bonus hours based on a_type and a_check
+    df = apply_bonus_hours(df, a_type, a_check, bonus_lookup)
 
     # Extract task IDs and check flags
     task_id_data = df.apply(extract_task_id, axis=1)
@@ -119,12 +130,12 @@ def process_data(input_file_path, reference_data):
             workpack_info['workpack_days']
         )
 
-    # Calculate total man-hours using ADJUSTED hours (with coefficient applied)
+    # Calculate total man-hours using ADJUSTED hours (with coefficient applied + bonus hours)
     total_mhrs = df_processed['Adjusted Hours'].sum()
     total_base_mhrs = df_processed['Base Hours'].sum()
 
     print(f"\nTotal Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
-    print(f"Total Adjusted Man-Hours (with coefficients): {hours_to_hhmm(total_mhrs)}")
+    print(f"Total Adjusted Man-Hours (with coefficients + bonus): {hours_to_hhmm(total_mhrs)}")
 
     # Return structured data dictionary
     return {
@@ -132,6 +143,8 @@ def process_data(input_file_path, reference_data):
         'total_base_mhrs': total_base_mhrs,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
+        'a_type': a_type,
+        'a_check': a_check,
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
         'workpack_days': workpack_info['workpack_days'],
