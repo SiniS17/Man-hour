@@ -38,15 +38,16 @@ REFERENCE_EO_ID_COLUMN = config['ReferenceSheet']['eo_id_column']
 REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 
 # Bonus hours configuration
-BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='bonus_hours.xlsx')
-BONUS_HOURS_SHEET = config.get('ReferenceSheet', 'bonus_hours_sheet', fallback='BonusHours')
+BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='vB20WHourNorm.xlsx')
+AIRCRAFT_CODE_COLUMN = config.get('ReferenceSheet', 'aircraft_code_column', fallback='Aircraft code')
+PRODUCT_CODE_COLUMN = config.get('ReferenceSheet', 'product_code_column', fallback='ProductCode')
+BONUS_1_COLUMN = config.get('ReferenceSheet', 'bonus_1', fallback='Hours')
+BONUS_2_COLUMN = config.get('ReferenceSheet', 'bonus_2', fallback='Hours2')
 
-# Bonus hours column names
-BONUS_1 = config.get('ReferenceSheet', 'bonus_1', fallback='A')
-BONUS_2 = config.get('ReferenceSheet', 'bonus_2', fallback='B')
-
-# Aircraft type lookup configuration (ADD THESE LINES)
-AC_TYPE_FILE = config.get('ReferenceSheet', 'ac_type_file', fallback='abc.xlsx')
+# Aircraft type lookup configuration
+AC_TYPE_FILE = config.get('ReferenceSheet', 'ac_type_file', fallback='Regis.xlsx')
+AC_TYPE_REGISTRATION_COLUMN = config.get('ReferenceSheet', 'ac_type_registration_column', fallback='Regis')
+AC_TYPE_TYPE_COLUMN = config.get('ReferenceSheet', 'ac_type_type_column', fallback='Type')
 
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
@@ -90,6 +91,9 @@ if config.has_section('SEQ_Coefficients'):
 HIGH_MHRS_HOURS = config.getint('Thresholds', 'high_mhrs_hours')
 RANDOM_SAMPLE_SIZE = config.getint('Thresholds', 'random_sample_size')
 
+# Output section
+SHOW_BONUS_HOURS_BREAKDOWN = config.getboolean('Output', 'show_bonus_hours_breakdown', fallback=True)
+
 
 def get_seq_coefficient(seq_no):
     """
@@ -125,8 +129,13 @@ def print_config():
     print(f"Reference EO ID Column: {REFERENCE_EO_ID_COLUMN}")
     print(f"EO Prefix: {REFERENCE_EO_PREFIX}")
     print(f"Bonus Hours File: {BONUS_HOURS_FILE}")
-    print(f"Bonus Hours Sheet: {BONUS_HOURS_SHEET}")
-    print(f"Aircraft Type File: {AC_TYPE_FILE}")  # ADD THIS LINE
+    print(f"Aircraft Code Column: {AIRCRAFT_CODE_COLUMN}")
+    print(f"Product Code Column: {PRODUCT_CODE_COLUMN}")
+    print(f"Bonus Column 1: {BONUS_1_COLUMN}")
+    print(f"Bonus Column 2: {BONUS_2_COLUMN}")
+    print(f"Aircraft Type File: {AC_TYPE_FILE}")
+    print(f"Aircraft Registration Column: {AC_TYPE_REGISTRATION_COLUMN}")
+    print(f"Aircraft Type Column: {AC_TYPE_TYPE_COLUMN}")
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
@@ -142,6 +151,7 @@ def print_config():
         print(f"Alt Qty Column: {ALT_QTY_COLUMN}")
     print(f"High Mhrs Threshold: {HIGH_MHRS_HOURS}")
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
+    print(f"Show Bonus Hours Breakdown: {SHOW_BONUS_HOURS_BREAKDOWN}")
     print(f"SEQ Mappings: {SEQ_MAPPINGS}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
     print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")

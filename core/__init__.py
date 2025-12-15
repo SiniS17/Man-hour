@@ -25,7 +25,15 @@ __all__ = [
     'TOOL_PARTNO_COLUMN',
     'TOTAL_QTY_COLUMN',
     'ALT_QTY_COLUMN',
-    'AC_TYPE_FILE',  # ADD THIS LINE
+    'AC_TYPE_FILE',
+    'AC_TYPE_REGISTRATION_COLUMN',
+    'AC_TYPE_TYPE_COLUMN',
+    'BONUS_HOURS_FILE',
+    'AIRCRAFT_CODE_COLUMN',
+    'PRODUCT_CODE_COLUMN',
+    'BONUS_1_COLUMN',
+    'BONUS_2_COLUMN',
+    'SHOW_BONUS_HOURS_BREAKDOWN',
     'SEQ_MAPPINGS',
     'SEQ_ID_MAPPINGS',
     'SEQ_COEFFICIENTS',
@@ -38,8 +46,6 @@ __all__ = [
     'REFERENCE_EO_PREFIX',
     'get_seq_coefficient',
     'print_config',
-    'BONUS_1',
-    'BONUS_2',
 
     # Data loader exports
     'load_input_files',

@@ -17,7 +17,7 @@ from features.special_code import (calculate_special_code_distribution,
                                    validate_special_code_column)
 from features.coefficients import apply_coefficients_to_dataframe, print_coefficient_summary
 from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
-                                  apply_bonus_hours)
+                                  apply_bonus_hours, get_bonus_hours, get_bonus_breakdown_by_source)
 
 # Import tool control module if enabled
 if ENABLE_TOOL_CONTROL:
@@ -46,7 +46,7 @@ def process_data(input_file_path, reference_data):
     ac_type, wp_type, ac_name = extract_from_dataframe(df)
 
     # Load bonus hours lookup table
-    bonus_lookup, bonus_breakdown = load_bonus_hours_lookup()
+    bonus_lookup = load_bonus_hours_lookup()
 
     # Build list of required columns based on configuration
     required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
@@ -78,9 +78,6 @@ def process_data(input_file_path, reference_data):
     # Apply SEQ coefficient to get adjusted hours
     df = apply_coefficients_to_dataframe(df)
 
-    # Apply bonus hours based on ac_type and wp_type
-    df = apply_bonus_hours(df, ac_type, wp_type, bonus_lookup)
-
     # Extract task IDs and check flags
     task_id_data = df.apply(extract_task_id, axis=1)
     df['Task ID'] = task_id_data.apply(lambda x: x[0])
@@ -106,7 +103,43 @@ def process_data(input_file_path, reference_data):
         print(f"Rows with None Task IDs (Seq. No. and respective rows):")
         print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, 'Task ID']])
 
-    # Identify high man-hours tasks (only from processed rows, using adjusted hours)
+    # Calculate total adjusted hours BEFORE bonus
+    total_adjusted_mhrs_before_bonus = df_processed['Adjusted Hours'].sum()
+
+    # Calculate coefficient contribution (difference between adjusted and base)
+    coefficient_hours = total_adjusted_mhrs_before_bonus - total_base_mhrs
+
+    # Get bonus breakdown by source
+    bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type)
+
+    # Get the bonus hours amount for this aircraft/check combination
+    bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
+
+    # Build additional hours breakdown
+    additional_breakdown = {}
+    if bonus_hours > 0:
+        # Try to get the sheet names where bonus was found
+        bonus_sources = report_data.get('bonus_sources', {})
+        for source, hours in bonus_sources.items():
+            if hours > 0:
+                additional_breakdown[source] = hours
+
+        # If no breakdown available, just show total bonus
+        if not additional_breakdown and bonus_hours > 0:
+            # Look up which sheets contributed
+            bonus_lookup_data = load_bonus_hours_lookup()
+            if wp_type in bonus_lookup_data and ac_type in bonus_lookup_data[wp_type]:
+                # Find which sheet(s) this came from by checking the raw data
+                additional_breakdown = get_bonus_breakdown(ac_type, wp_type, bonus_lookup_data)
+
+    # Apply bonus hours to dataframe
+    df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
+
+    # Calculate total man-hours AFTER bonus hours
+    total_mhrs = df_processed['Adjusted Hours'].sum()
+    total_base_mhrs = df_processed['Base Hours'].sum()
+
+    # Identify high man-hours tasks (using adjusted hours AFTER bonus)
     high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
 
     # Check for new task IDs (only for rows that should be checked)
@@ -120,7 +153,7 @@ def process_data(input_file_path, reference_data):
     sample_size = min(RANDOM_SAMPLE_SIZE, len(df_processed))
     random_sample = df_processed.sample(n=sample_size, random_state=1) if len(df_processed) > 0 else pd.DataFrame()
 
-    # Calculate special code distribution if enabled (only from processed rows, using adjusted hours)
+    # Calculate special code distribution if enabled (using adjusted hours AFTER bonus)
     special_code_distribution = None
     special_code_per_day = None
     if enable_special_code_processing:
@@ -130,23 +163,26 @@ def process_data(input_file_path, reference_data):
             workpack_info['workpack_days']
         )
 
-    # Calculate total man-hours using ADJUSTED hours (with coefficient applied + bonus hours)
-    total_mhrs = df_processed['Adjusted Hours'].sum()
-    total_base_mhrs = df_processed['Base Hours'].sum()
-
     print(f"\nTotal Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
-    print(f"Total Adjusted Man-Hours (with coefficients + bonus): {hours_to_hhmm(total_mhrs)}")
+    print(f"Total Adjusted Man-Hours (with coefficients): {hours_to_hhmm(total_adjusted_mhrs_before_bonus)}")
+    if bonus_hours > 0:
+        print(f"Bonus Hours: +{hours_to_hhmm(bonus_hours)}")
+        print(f"Final Total (Adjusted + Bonus): {hours_to_hhmm(total_mhrs)}")
+    else:
+        print(f"No bonus hours applied")
 
     # Return structured data dictionary
     return {
         'total_mhrs': total_mhrs,
         'total_base_mhrs': total_base_mhrs,
+        'coefficient_hours': coefficient_hours,
+        'bonus_hours': bonus_hours,
+        'bonus_breakdown': bonus_breakdown,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
         'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
         'ac_type': ac_type,
         'ac_name': ac_name,
         'wp_type': wp_type,
-        'bonus_breakdown': bonus_breakdown,  # ADD THIS LINE
         'special_code_distribution': special_code_distribution,
         'special_code_per_day': special_code_per_day,
         'workpack_days': workpack_info['workpack_days'],
