@@ -1,7 +1,7 @@
 """
 Total Man-Hours Sheet Module
 Generates TWO separate sheets:
-1. Total Man-Hours Summary (bonus breakdown and totals)
+1. Total Man-Hours Summary (bonus breakdown and type coefficient breakdown)
 2. Special Code Distribution (special code analysis)
 """
 
@@ -30,12 +30,12 @@ def create_total_mhrs_sheet(writer, report_data):
 
 def create_man_hours_summary_sheet(writer, report_data):
     """
-    Create the Total Man-Hours Summary sheet with project info and bonus breakdown.
+    Create the Total Man-Hours Summary sheet with project info, bonus breakdown, and type coefficient breakdown.
 
     Layout:
     1. Project Information Header
     2. Base Man-Hours
-    3. Additional Hours Breakdown (Bonus + Coefficient)
+    3. Additional Hours Breakdown (Bonus + Type Coefficient)
     4. Final Total
 
     Args:
@@ -47,7 +47,7 @@ def create_man_hours_summary_sheet(writer, report_data):
     total_hours = report_data['total_mhrs']
     total_base_hours = report_data.get('total_base_mhrs', total_hours)
     bonus_hours = report_data.get('bonus_hours', 0.0)
-    coefficient_hours = report_data.get('coefficient_hours', 0.0)
+    type_coefficient_hours = report_data.get('type_coefficient_hours', 0.0)
 
     workpack_days = report_data.get('workpack_days')
     start_date = report_data.get('start_date')
@@ -75,22 +75,36 @@ def create_man_hours_summary_sheet(writer, report_data):
     # === ADDITIONAL HOURS BREAKDOWN ===
     data.append(['ADDITIONAL HOURS BREAKDOWN', 'HH:MM', 'Hours'])
 
-    # Get bonus breakdown by source
-    bonus_breakdown = report_data.get('bonus_breakdown', {})
-
     additional_total = 0.0
 
-    # Add each bonus source
+    # 1. Bonus Hours Breakdown
+    bonus_breakdown = report_data.get('bonus_breakdown', {})
     if bonus_breakdown:
+        data.append(['Bonus Hours:', '', ''])
         for source, hours in bonus_breakdown.items():
             if hours > 0:
-                data.append([f"  Bonus: {source}", hours_to_hhmm(hours), f"{hours:.2f}"])
+                data.append([f"  • {source}", hours_to_hhmm(hours), f"{hours:.2f}"])
                 additional_total += hours
+        data.append(['', '', ''])  # Empty row after bonus section
 
-    # Add SEQ coefficient row
-    if coefficient_hours > 0:
-        data.append(['  SEQ Coefficient Adjustment', hours_to_hhmm(coefficient_hours), f"{coefficient_hours:.2f}"])
-        additional_total += coefficient_hours
+    # 2. Type Coefficient Breakdown
+    type_coeff_breakdown = report_data.get('type_coeff_breakdown', {})
+    if type_coeff_breakdown:
+        data.append(['Type Coefficient Adjustments:', '', ''])
+        for special_type, info in type_coeff_breakdown.items():
+            additional_hours = info.get('additional_hours', 0)
+            coefficient = info.get('coefficient', 1.0)
+            count = info.get('count', 0)
+            if additional_hours != 0:  # Show both positive and negative adjustments
+                label = f"  • {special_type} (Coeff: {coefficient:.2f}, {count} tasks)"
+                data.append([label, hours_to_hhmm(additional_hours), f"{additional_hours:.2f}"])
+                additional_total += additional_hours
+        data.append(['', '', ''])  # Empty row after type coefficient section
+    elif type_coefficient_hours > 0:
+        # If no breakdown but has coefficient hours, show total
+        data.append(['Type Coefficient Adjustments:', hours_to_hhmm(type_coefficient_hours), f"{type_coefficient_hours:.2f}"])
+        additional_total += type_coefficient_hours
+        data.append(['', '', ''])  # Empty row
 
     # Subtotal of additional hours
     data.append(['Total Additional Hours:', hours_to_hhmm(additional_total), f"{additional_total:.2f}"])
@@ -113,7 +127,7 @@ def create_man_hours_summary_sheet(writer, report_data):
     worksheet = writer.sheets['Total Man-Hours Summary']
 
     # Auto-adjust column widths
-    worksheet.column_dimensions['A'].width = 35
+    worksheet.column_dimensions['A'].width = 45
     worksheet.column_dimensions['B'].width = 20
     worksheet.column_dimensions['C'].width = 15
 

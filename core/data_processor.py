@@ -15,7 +15,8 @@ from core.data_loader import load_input_dataframe, extract_workpack_dates
 from features.special_code import (calculate_special_code_distribution,
                                    calculate_special_code_per_day,
                                    validate_special_code_column)
-from features.coefficients import apply_coefficients_to_dataframe, print_coefficient_summary
+from features.type_coefficient import (load_type_coefficient_lookup, apply_type_coefficients,
+                                       get_type_coefficient_breakdown, calculate_total_type_coefficient_hours)
 from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
                                   apply_bonus_hours, get_bonus_hours, get_bonus_breakdown_by_source)
 
@@ -45,8 +46,9 @@ def process_data(input_file_path, reference_data):
     # Extract ac_type and wp_type from column A (first row only, since all rows are the same)
     ac_type, wp_type, ac_name = extract_from_dataframe(df)
 
-    # Load bonus hours lookup table
+    # Load lookup tables
     bonus_lookup = load_bonus_hours_lookup()
+    type_coeff_lookup = load_type_coefficient_lookup()
 
     # Build list of required columns based on configuration
     required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
@@ -75,8 +77,8 @@ def process_data(input_file_path, reference_data):
     # Convert "Planned Mhrs" (in minutes) to base hours
     df['Base Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
 
-    # Apply SEQ coefficient to get adjusted hours
-    df = apply_coefficients_to_dataframe(df)
+    # Apply type coefficients based on special type column
+    df = apply_type_coefficients(df, ac_type, wp_type, type_coeff_lookup)
 
     # Extract task IDs and check flags
     task_id_data = df.apply(extract_task_id, axis=1)
@@ -94,9 +96,6 @@ def process_data(input_file_path, reference_data):
     print(f"Rows to process (after removing duplicates): {len(df_processed)}")
     print(f"Rows ignored: {len(df) - len(df_processed)}")
 
-    # Show coefficient application summary
-    print_coefficient_summary(df_processed)
-
     # Debugging: Print rows with None task IDs
     none_task_ids = df_processed[df_processed['Task ID'].isna()]
     if not none_task_ids.empty:
@@ -107,8 +106,11 @@ def process_data(input_file_path, reference_data):
     total_base_mhrs = df_processed['Base Hours'].sum()
     total_adjusted_mhrs_before_bonus = df_processed['Adjusted Hours'].sum()
 
-    # Calculate coefficient contribution (difference between adjusted and base)
-    coefficient_hours = total_adjusted_mhrs_before_bonus - total_base_mhrs
+    # Calculate type coefficient contribution (difference between adjusted and base)
+    type_coefficient_hours = calculate_total_type_coefficient_hours(df_processed)
+
+    # Get type coefficient breakdown by special type
+    type_coeff_breakdown = get_type_coefficient_breakdown(df_processed)
 
     # Get the bonus hours amount for this aircraft/check combination
     bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
@@ -147,7 +149,7 @@ def process_data(input_file_path, reference_data):
         )
 
     print(f"\nTotal Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
-    print(f"Total Adjusted Man-Hours (with coefficients): {hours_to_hhmm(total_adjusted_mhrs_before_bonus)}")
+    print(f"Total Adjusted Man-Hours (with type coefficients): {hours_to_hhmm(total_adjusted_mhrs_before_bonus)}")
     if bonus_hours > 0:
         print(f"Bonus Hours: +{hours_to_hhmm(bonus_hours)}")
         print(f"Final Total (Adjusted + Bonus): {hours_to_hhmm(total_mhrs)}")
@@ -158,7 +160,8 @@ def process_data(input_file_path, reference_data):
     return {
         'total_mhrs': total_mhrs,
         'total_base_mhrs': total_base_mhrs,
-        'coefficient_hours': coefficient_hours,
+        'type_coefficient_hours': type_coefficient_hours,
+        'type_coeff_breakdown': type_coeff_breakdown,
         'bonus_hours': bonus_hours,
         'bonus_breakdown': bonus_breakdown,
         'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),

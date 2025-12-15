@@ -10,7 +10,7 @@ from core.config import SEQ_NO_COLUMN, TITLE_COLUMN
 
 def create_high_mhrs_sheet(writer, report_data):
     """
-    Create the High Man-Hours Tasks sheet with coefficient info.
+    Create the High Man-Hours Tasks sheet with type coefficient info.
 
     Args:
         writer: pd.ExcelWriter object
@@ -69,8 +69,8 @@ def build_export_columns(df):
     if 'Task ID' in df.columns:
         columns_to_export.append('Task ID')
 
-    # Add coefficient and hour columns
-    columns_to_export.extend(['Coefficient', 'Base Mhrs (HH:MM)', 'Adjusted Mhrs (HH:MM)'])
+    # Add type coefficient and hour columns
+    columns_to_export.extend(['Type Coefficient', 'Base Mhrs (HH:MM)', 'Adjusted Mhrs (HH:MM)'])
 
     return columns_to_export
 

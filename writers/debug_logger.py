@@ -62,7 +62,7 @@ def write_debug_header(f, base_filename, report_data):
     # Add man-hours summary
     f.write("\nMan-Hours Summary:\n")
     f.write(f"Base Man-Hours: {report_data.get('total_base_mhrs_hhmm', 'N/A')}\n")
-    f.write(f"Adjusted Man-Hours (with coefficients): {report_data['total_mhrs_hhmm']}\n")
+    f.write(f"Adjusted Man-Hours (with type coefficients): {report_data['total_mhrs_hhmm']}\n")
 
     f.write("=" * 60 + "\n\n")
 
@@ -82,14 +82,14 @@ def write_debug_sample(f, report_data):
         return
 
     f.write(f"DEBUG SAMPLE REPORT (Random {len(debug_df)} Rows):\n")
-    f.write("-" * 110 + "\n")
+    f.write("-" * 120 + "\n")
 
     if report_data['enable_special_code']:
         write_debug_sample_with_special_code(f, debug_df)
     else:
         write_debug_sample_without_special_code(f, debug_df)
 
-    f.write("-" * 110 + "\n")
+    f.write("-" * 120 + "\n")
 
 
 def write_debug_sample_with_special_code(f, debug_df):
@@ -100,22 +100,22 @@ def write_debug_sample_with_special_code(f, debug_df):
         f: File object
         debug_df (pd.DataFrame): Debug sample DataFrame
     """
-    f.write(f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Coeff | Base Mhrs | Adjusted Mhrs |\n")
-    f.write("-" * 110 + "\n")
+    f.write(f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Type Coeff | Base Mhrs | Adjusted Mhrs |\n")
+    f.write("-" * 120 + "\n")
 
     for index, row in debug_df.iterrows():
         seq_no = str(row[SEQ_NO_COLUMN])
         special_code = str(row.get('Special code', 'N/A')) if pd.notna(row.get('Special code')) else "N/A"
         special_code = special_code[:12]
         task_id = str(row['Task ID'])[:16]
-        coefficient = row.get('Coefficient', 1.0)
+        type_coefficient = row.get('Type Coefficient', 1.0)
         base_hours = row.get('Base Hours', 0)
         adjusted_hours = row.get('Adjusted Hours', 0)
         base_time_hhmm = hours_to_hhmm(base_hours)
         adjusted_time_hhmm = hours_to_hhmm(adjusted_hours)
 
         f.write(
-            f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
+            f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {type_coefficient:<10.2f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
 
 
 def write_debug_sample_without_special_code(f, debug_df):
@@ -127,21 +127,21 @@ def write_debug_sample_without_special_code(f, debug_df):
         debug_df (pd.DataFrame): Debug sample DataFrame
     """
     f.write(
-        f"| {SEQ_NO_COLUMN:<8} | {TITLE_COLUMN[:30]:<30} | Task ID          | Coeff | Base Mhrs | Adjusted Mhrs |\n")
-    f.write("-" * 115 + "\n")
+        f"| {SEQ_NO_COLUMN:<8} | {TITLE_COLUMN[:30]:<30} | Task ID          | Type Coeff | Base Mhrs | Adjusted Mhrs |\n")
+    f.write("-" * 125 + "\n")
 
     for index, row in debug_df.iterrows():
         seq_no = str(row[SEQ_NO_COLUMN])
         title = str(row[TITLE_COLUMN])[:30]
         task_id = str(row['Task ID'])[:16]
-        coefficient = row.get('Coefficient', 1.0)
+        type_coefficient = row.get('Type Coefficient', 1.0)
         base_hours = row.get('Base Hours', 0)
         adjusted_hours = row.get('Adjusted Hours', 0)
         base_time_hhmm = hours_to_hhmm(base_hours)
         adjusted_time_hhmm = hours_to_hhmm(adjusted_hours)
 
         f.write(
-            f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
+            f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {type_coefficient:<10.2f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |\n")
 
 
 def format_debug_row(row, include_special_code=False):
@@ -157,7 +157,7 @@ def format_debug_row(row, include_special_code=False):
     """
     seq_no = str(row[SEQ_NO_COLUMN])
     task_id = str(row.get('Task ID', 'N/A'))[:16]
-    coefficient = row.get('Coefficient', 1.0)
+    type_coefficient = row.get('Type Coefficient', 1.0)
     base_hours = row.get('Base Hours', 0)
     adjusted_hours = row.get('Adjusted Hours', 0)
     base_time_hhmm = hours_to_hhmm(base_hours)
@@ -166,10 +166,10 @@ def format_debug_row(row, include_special_code=False):
     if include_special_code:
         special_code = str(row.get('Special code', 'N/A')) if pd.notna(row.get('Special code')) else "N/A"
         special_code = special_code[:12]
-        return f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |"
+        return f"| {seq_no:<8} | {special_code:<12} | {task_id:<16} | {type_coefficient:<10.2f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |"
     else:
         title = str(row[TITLE_COLUMN])[:30]
-        return f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {coefficient:<5.1f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |"
+        return f"| {seq_no:<8} | {title:<30} | {task_id:<16} | {type_coefficient:<10.2f} | {base_time_hhmm:>9} | {adjusted_time_hhmm:>13} |"
 
 
 def create_log_folder_structure(base_filename):
