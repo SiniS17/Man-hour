@@ -4,6 +4,8 @@ Core processing logic for workpack data analysis
 """
 
 import pandas as pd
+import os
+from datetime import datetime
 from utils.time_utils import convert_planned_mhrs, hours_to_hhmm
 from utils.validation import validate_required_columns
 from core.config import (SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN,
@@ -16,9 +18,11 @@ from features.special_code import (calculate_special_code_distribution,
                                    calculate_special_code_per_day,
                                    validate_special_code_column)
 from features.type_coefficient import (load_type_coefficient_lookup, apply_type_coefficients,
-                                       calculate_type_coefficient_breakdown, calculate_total_type_coefficient_hours)
+                                       calculate_type_coefficient_breakdown, calculate_total_type_coefficient_hours,
+                                       set_logger)
 from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
                                   apply_bonus_hours, get_bonus_hours, get_bonus_breakdown_by_source)
+from writers.debug_logger import DebugLogger
 
 # Import tool control module if enabled
 if ENABLE_TOOL_CONTROL:
@@ -37,224 +41,249 @@ def process_data(input_file_path, reference_data):
     Returns:
         dict: Dictionary with structured data for Excel output
     """
-    print("\n" + "="*80)
-    print("STARTING DATA PROCESSING")
-    print("="*80)
+    # Initialize debug logger
+    base_filename = os.path.splitext(os.path.basename(input_file_path))[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Load the uploaded file
-    df = load_input_dataframe(input_file_path)
+    with DebugLogger(base_filename, timestamp) as logger:
+        # Set logger for type_coefficient module
+        set_logger(logger)
 
-    print(f"\n=== INITIAL DATA CHECK ===")
-    print(f"Total rows loaded: {len(df)}")
-    print(f"Columns: {list(df.columns)}")
-    if SPECIAL_TYPE_COLUMN in df.columns:
-        print(f"Special type column '{SPECIAL_TYPE_COLUMN}' found!")
-        unique_types = df[SPECIAL_TYPE_COLUMN].dropna().unique()
-        print(f"Unique special types: {list(unique_types)}")
-    else:
-        print(f"Special type column '{SPECIAL_TYPE_COLUMN}' NOT FOUND")
+        logger.log_separator()
+        logger.log("STARTING DATA PROCESSING")
+        logger.log_separator()
+        logger.log(f"File: {input_file_path}")
+        logger.log(f"Timestamp: {timestamp}")
+        logger.log("")
 
-    # Extract workpack dates
-    workpack_info = extract_workpack_dates(df)
+        # Load the uploaded file
+        df = load_input_dataframe(input_file_path)
 
-    # Extract ac_type and wp_type from column A (first row only, since all rows are the same)
-    ac_type, wp_type, ac_name = extract_from_dataframe(df)
+        logger.log_header("INITIAL DATA CHECK")
+        logger.log(f"Total rows loaded: {len(df)}")
+        logger.log(f"Columns: {list(df.columns)}")
 
-    print(f"\n=== EXTRACTED INFO ===")
-    print(f"ac_type: {ac_type}")
-    print(f"wp_type: {wp_type}")
-    print(f"ac_name: {ac_name}")
-
-    # Load lookup tables
-    bonus_lookup = load_bonus_hours_lookup()
-    type_coeff_lookup = load_type_coefficient_lookup()
-
-    # Build list of required columns based on configuration
-    required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
-
-    # Validate special code configuration
-    enable_special_code_processing = False
-    if ENABLE_SPECIAL_CODE:
-        is_valid, error_msg = validate_special_code_column(df, SPECIAL_CODE_COLUMN)
-        if not is_valid:
-            print(f"WARNING: {error_msg}")
-            print("Proceeding without special code analysis...")
+        if SPECIAL_TYPE_COLUMN in df.columns:
+            logger.log(f"✓ Special type column '{SPECIAL_TYPE_COLUMN}' found!")
+            unique_types = df[SPECIAL_TYPE_COLUMN].dropna().unique()
+            logger.log(f"Unique special types: {list(unique_types)}")
         else:
-            required_columns.append(SPECIAL_CODE_COLUMN)
-            enable_special_code_processing = True
+            logger.log(f"✗ Special type column '{SPECIAL_TYPE_COLUMN}' NOT FOUND")
+        logger.log("")
 
-    # Check for required columns
-    base_required = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
-    validate_required_columns(df, base_required, input_file_path)
+        # Extract workpack dates
+        workpack_info = extract_workpack_dates(df)
 
-    # Check tool availability if enabled (processes independently)
-    tool_control_issues = pd.DataFrame()
-    if ENABLE_TOOL_CONTROL:
-        from core.config import SEQ_MAPPINGS, SEQ_ID_MAPPINGS
-        tool_control_issues = process_tool_control(input_file_path, SEQ_MAPPINGS, SEQ_ID_MAPPINGS)
+        # Extract ac_type and wp_type from column A (first row only, since all rows are the same)
+        ac_type, wp_type, ac_name = extract_from_dataframe(df)
 
-    # Convert "Planned Mhrs" (in minutes) to base hours
-    df['Base Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
+        logger.log_header("EXTRACTED INFO")
+        logger.log(f"ac_type: {ac_type}")
+        logger.log(f"wp_type: {wp_type}")
+        logger.log(f"ac_name: {ac_name}")
+        logger.log("")
 
-    print(f"\n=== AFTER BASE HOURS CALCULATION ===")
-    print(f"Total Base Hours (all rows): {df['Base Hours'].sum():.2f}")
+        # Load lookup tables
+        bonus_lookup = load_bonus_hours_lookup()
+        type_coeff_lookup = load_type_coefficient_lookup()
 
-    # Apply type coefficients based on special type column (to ALL rows)
-    df = apply_type_coefficients(df, ac_type, wp_type, type_coeff_lookup)
+        # Build list of required columns based on configuration
+        required_columns = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
 
-    print(f"\n=== AFTER TYPE COEFFICIENT APPLICATION ===")
-    print(f"Total Base Hours: {df['Base Hours'].sum():.2f}")
-    print(f"Total Adjusted Hours: {df['Adjusted Hours'].sum():.2f}")
-    print(f"Difference: {(df['Adjusted Hours'].sum() - df['Base Hours'].sum()):.2f}")
+        # Validate special code configuration
+        enable_special_code_processing = False
+        if ENABLE_SPECIAL_CODE:
+            is_valid, error_msg = validate_special_code_column(df, SPECIAL_CODE_COLUMN)
+            if not is_valid:
+                logger.log(f"WARNING: {error_msg}")
+                logger.log("Proceeding without special code analysis...")
+            else:
+                required_columns.append(SPECIAL_CODE_COLUMN)
+                enable_special_code_processing = True
 
-    # Extract task IDs and check flags
-    task_id_data = df.apply(extract_task_id, axis=1)
-    df['Task ID'] = task_id_data.apply(lambda x: x[0])
-    df['Should Check Reference'] = task_id_data.apply(lambda x: x[1])
-    df['Should Process'] = task_id_data.apply(lambda x: x[2])
+        # Check for required columns
+        base_required = [SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN]
+        validate_required_columns(df, base_required, input_file_path)
 
-    # Keep a copy of the original data (before deduplication) for type coefficient calculation
-    df_original_for_coeff = df[df['Should Process'] == True].copy()
+        # Check tool availability if enabled (processes independently)
+        tool_control_issues = pd.DataFrame()
+        if ENABLE_TOOL_CONTROL:
+            from core.config import SEQ_MAPPINGS, SEQ_ID_MAPPINGS
+            tool_control_issues = process_tool_control(input_file_path, SEQ_MAPPINGS, SEQ_ID_MAPPINGS)
 
-    print(f"\n=== BEFORE DEDUPLICATION ===")
-    print(f"Rows to process: {len(df_original_for_coeff)}")
-    print(f"Total Base Hours: {df_original_for_coeff['Base Hours'].sum():.2f}")
-    print(f"Total Adjusted Hours: {df_original_for_coeff['Adjusted Hours'].sum():.2f}")
+        # Convert "Planned Mhrs" (in minutes) to base hours
+        df['Base Hours'] = df[PLANNED_MHRS_COLUMN].apply(convert_planned_mhrs)
 
-    # Filter out rows that should not be processed (ignore mode)
-    df_processed = df[df['Should Process'] == True].copy()
+        logger.log_header("AFTER BASE HOURS CALCULATION")
+        logger.log(f"Total Base Hours (all rows): {df['Base Hours'].sum():.2f}")
+        logger.log("")
 
-    # IMPORTANT: Keep only the FIRST occurrence of each SEQ to avoid duplicate man-hour counting
-    df_processed = df_processed.drop_duplicates(subset=[SEQ_NO_COLUMN], keep='first')
+        # Apply type coefficients based on special type column (to ALL rows)
+        df = apply_type_coefficients(df, ac_type, wp_type, type_coeff_lookup)
 
-    print(f"\n=== AFTER DEDUPLICATION ===")
-    print(f"Total rows: {len(df)}")
-    print(f"Rows to process (after removing duplicates): {len(df_processed)}")
-    print(f"Rows ignored: {len(df) - len(df_processed)}")
-    print(f"Total Base Hours (deduplicated): {df_processed['Base Hours'].sum():.2f}")
-    print(f"Total Adjusted Hours (deduplicated): {df_processed['Adjusted Hours'].sum():.2f}")
+        logger.log_header("AFTER TYPE COEFFICIENT APPLICATION")
+        logger.log(f"Total Base Hours: {df['Base Hours'].sum():.2f}")
+        logger.log(f"Total Adjusted Hours: {df['Adjusted Hours'].sum():.2f}")
+        logger.log(f"Difference: {(df['Adjusted Hours'].sum() - df['Base Hours'].sum()):.2f}")
+        logger.log("")
 
-    # Debugging: Print rows with None task IDs
-    none_task_ids = df_processed[df_processed['Task ID'].isna()]
-    if not none_task_ids.empty:
-        print(f"\nRows with None Task IDs (Seq. No. and respective rows):")
-        print(none_task_ids[[SEQ_NO_COLUMN, TITLE_COLUMN, 'Task ID']])
+        # Extract task IDs and check flags
+        task_id_data = df.apply(extract_task_id, axis=1)
+        df['Task ID'] = task_id_data.apply(lambda x: x[0])
+        df['Should Check Reference'] = task_id_data.apply(lambda x: x[1])
+        df['Should Process'] = task_id_data.apply(lambda x: x[2])
 
-    # Calculate total base hours
-    total_base_mhrs = df_processed['Base Hours'].sum()
+        # Keep a copy of the original data (before deduplication) for type coefficient calculation
+        df_original_for_coeff = df[df['Should Process'] == True].copy()
 
-    # Calculate type coefficient breakdown (uses appropriate dataframe based on setting)
-    type_coeff_breakdown = calculate_type_coefficient_breakdown(df_original_for_coeff, df_processed)
-    type_coefficient_hours = calculate_total_type_coefficient_hours(df_original_for_coeff, df_processed)
+        logger.log_header("BEFORE DEDUPLICATION")
+        logger.log(f"Rows to process: {len(df_original_for_coeff)}")
+        logger.log(f"Total Base Hours: {df_original_for_coeff['Base Hours'].sum():.2f}")
+        logger.log(f"Total Adjusted Hours: {df_original_for_coeff['Adjusted Hours'].sum():.2f}")
+        logger.log("")
 
-    # Get the bonus hours amount for this aircraft/check combination
-    bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
+        # Filter out rows that should not be processed (ignore mode)
+        df_processed = df[df['Should Process'] == True].copy()
 
-    # Get bonus breakdown by source (which sheets contributed)
-    bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type)
+        # IMPORTANT: Keep only the FIRST occurrence of each SEQ to avoid duplicate man-hour counting
+        df_processed = df_processed.drop_duplicates(subset=[SEQ_NO_COLUMN], keep='first')
 
-    print(f"\n=== BONUS BREAKDOWN ===")
-    print(f"Bonus from files: {bonus_breakdown}")
-    print(f"Type coeff breakdown: {type_coeff_breakdown}")
+        logger.log_header("AFTER DEDUPLICATION")
+        logger.log(f"Total rows: {len(df)}")
+        logger.log(f"Rows to process (after removing duplicates): {len(df_processed)}")
+        logger.log(f"Rows ignored: {len(df) - len(df_processed)}")
+        logger.log(f"Total Base Hours (deduplicated): {df_processed['Base Hours'].sum():.2f}")
+        logger.log(f"Total Adjusted Hours (deduplicated): {df_processed['Adjusted Hours'].sum():.2f}")
+        logger.log("")
 
-    # Combine bonus breakdown with type coefficient breakdown
-    # Type coefficients are shown as bonus items
-    combined_bonus_breakdown = {}
+        # Debugging: Print rows with None task IDs
+        none_task_ids = df_processed[df_processed['Task ID'].isna()]
+        if not none_task_ids.empty:
+            logger.log(f"Rows with None Task IDs:")
+            for idx, row in none_task_ids.iterrows():
+                logger.log(f"  SEQ {row[SEQ_NO_COLUMN]}: {row[TITLE_COLUMN]}")
+            logger.log("")
 
-    # Add regular bonus hours
-    if bonus_breakdown:
-        for source, hours in bonus_breakdown.items():
-            if hours > 0:
-                combined_bonus_breakdown[source] = hours
+        # Calculate total base hours
+        total_base_mhrs = df_processed['Base Hours'].sum()
 
-    # Add type coefficient as bonus items
-    if type_coeff_breakdown:
-        for special_type, additional_hours in type_coeff_breakdown.items():
-            if abs(additional_hours) > 0.01:  # Only show non-zero values
-                combined_bonus_breakdown[f"Type Coefficient ({special_type})"] = additional_hours
+        # Calculate type coefficient breakdown (uses appropriate dataframe based on setting)
+        type_coeff_breakdown = calculate_type_coefficient_breakdown(df_original_for_coeff, df_processed)
+        type_coefficient_hours = calculate_total_type_coefficient_hours(df_original_for_coeff, df_processed)
 
-    print(f"\n=== COMBINED BREAKDOWN ===")
-    print(f"Combined: {combined_bonus_breakdown}")
+        # Get the bonus hours amount for this aircraft/check combination
+        bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
 
-    # Calculate total additional hours (bonus + type coefficient)
-    total_additional_hours = bonus_hours + type_coefficient_hours
+        # Get bonus breakdown by source (which sheets contributed)
+        bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type)
 
-    print(f"\n=== TOTALS BEFORE APPLYING BONUS ===")
-    print(f"Bonus hours: {bonus_hours:.2f}")
-    print(f"Type coefficient hours: {type_coefficient_hours:.2f}")
-    print(f"Total additional: {total_additional_hours:.2f}")
+        logger.log_header("BONUS BREAKDOWN")
+        logger.log(f"Bonus from files: {bonus_breakdown}")
+        logger.log(f"Type coeff breakdown: {type_coeff_breakdown}")
+        logger.log("")
 
-    # Apply bonus hours to dataframe (adds fixed bonus to adjusted hours)
-    df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
+        # Combine bonus breakdown with type coefficient breakdown
+        # Type coefficients are shown as bonus items
+        combined_bonus_breakdown = {}
 
-    # Calculate total man-hours AFTER all adjustments
-    total_mhrs = df_processed['Adjusted Hours'].sum()
+        # Add regular bonus hours
+        if bonus_breakdown:
+            for source, hours in bonus_breakdown.items():
+                if hours > 0:
+                    combined_bonus_breakdown[source] = hours
 
-    print(f"\n=== FINAL TOTALS ===")
-    print(f"Total Base: {total_base_mhrs:.2f}")
-    print(f"Total Additional: {total_additional_hours:.2f}")
-    print(f"Total Man-Hours: {total_mhrs:.2f}")
-    print(f"Calculation check: {total_base_mhrs:.2f} + {total_additional_hours:.2f} = {total_base_mhrs + total_additional_hours:.2f}")
+        # Add type coefficient as bonus items
+        if type_coeff_breakdown:
+            for special_type, additional_hours in type_coeff_breakdown.items():
+                if abs(additional_hours) > 0.01:  # Only show non-zero values
+                    combined_bonus_breakdown[f"Type Coefficient ({special_type})"] = additional_hours
 
-    # Identify high man-hours tasks (using adjusted hours AFTER bonus)
-    high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
+        logger.log_header("COMBINED BREAKDOWN")
+        logger.log(f"Combined: {combined_bonus_breakdown}")
+        logger.log("")
 
-    # Check for new task IDs (only for rows that should be checked)
-    new_task_ids_with_seq = identify_new_task_ids(
-        df_processed,
-        reference_data['task_ids'],
-        reference_data['eo_ids']
-    )
+        # Calculate total additional hours (bonus + type coefficient)
+        total_additional_hours = bonus_hours + type_coefficient_hours
 
-    # Generate a random sample for debugging (only from processed rows)
-    sample_size = min(RANDOM_SAMPLE_SIZE, len(df_processed))
-    random_sample = df_processed.sample(n=sample_size, random_state=1) if len(df_processed) > 0 else pd.DataFrame()
+        logger.log_header("TOTALS BEFORE APPLYING BONUS")
+        logger.log(f"Bonus hours: {bonus_hours:.2f}")
+        logger.log(f"Type coefficient hours: {type_coefficient_hours:.2f}")
+        logger.log(f"Total additional: {total_additional_hours:.2f}")
+        logger.log("")
 
-    # Calculate special code distribution if enabled (using adjusted hours AFTER bonus)
-    special_code_distribution = None
-    special_code_per_day = None
-    if enable_special_code_processing:
-        special_code_distribution = calculate_special_code_distribution(df_processed)
-        special_code_per_day = calculate_special_code_per_day(
-            special_code_distribution,
-            workpack_info['workpack_days']
+        # Apply bonus hours to dataframe (adds fixed bonus to adjusted hours)
+        df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
+
+        # Calculate total man-hours AFTER all adjustments
+        total_mhrs = df_processed['Adjusted Hours'].sum()
+
+        logger.log_header("FINAL TOTALS")
+        logger.log(f"Total Base: {total_base_mhrs:.2f}")
+        logger.log(f"Total Additional: {total_additional_hours:.2f}")
+        logger.log(f"Total Man-Hours: {total_mhrs:.2f}")
+        logger.log(f"Calculation check: {total_base_mhrs:.2f} + {total_additional_hours:.2f} = {total_base_mhrs + total_additional_hours:.2f}")
+        logger.log("")
+
+        # Identify high man-hours tasks (using adjusted hours AFTER bonus)
+        high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
+
+        # Check for new task IDs (only for rows that should be checked)
+        new_task_ids_with_seq = identify_new_task_ids(
+            df_processed,
+            reference_data['task_ids'],
+            reference_data['eo_ids']
         )
 
-    print(f"\n" + "="*80)
-    print("SUMMARY")
-    print("="*80)
-    print(f"Total Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
-    print(f"Type Coefficient Additional Hours: {hours_to_hhmm(type_coefficient_hours)}")
-    if bonus_hours > 0:
-        print(f"Bonus Hours: +{hours_to_hhmm(bonus_hours)}")
-    print(f"Total Additional Hours: {hours_to_hhmm(total_additional_hours)}")
-    print(f"Final Total: {hours_to_hhmm(total_mhrs)}")
-    print("="*80 + "\n")
+        # Generate a random sample for debugging (only from processed rows)
+        sample_size = min(RANDOM_SAMPLE_SIZE, len(df_processed))
+        random_sample = df_processed.sample(n=sample_size, random_state=1) if len(df_processed) > 0 else pd.DataFrame()
 
-    # Return structured data dictionary
-    return {
-        'total_mhrs': total_mhrs,
-        'total_base_mhrs': total_base_mhrs,
-        'total_additional_hours': total_additional_hours,
-        'bonus_breakdown': combined_bonus_breakdown,  # Combined bonus + type coefficient
-        'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
-        'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
-        'ac_type': ac_type,
-        'ac_name': ac_name,
-        'wp_type': wp_type,
-        'special_code_distribution': special_code_distribution,
-        'special_code_per_day': special_code_per_day,
-        'workpack_days': workpack_info['workpack_days'],
-        'start_date': workpack_info['start_date'],
-        'end_date': workpack_info['end_date'],
-        'enable_special_code': enable_special_code_processing,
-        'enable_tool_control': ENABLE_TOOL_CONTROL,
-        'tool_control_issues': tool_control_issues,
-        'high_mhrs_tasks': high_mhrs_tasks,
-        'new_task_ids_with_seq': new_task_ids_with_seq,
-        'debug_sample': random_sample,
-        'high_mhrs_threshold': HIGH_MHRS_HOURS
-    }
+        # Calculate special code distribution if enabled (using adjusted hours AFTER bonus)
+        special_code_distribution = None
+        special_code_per_day = None
+        if enable_special_code_processing:
+            special_code_distribution = calculate_special_code_distribution(df_processed)
+            special_code_per_day = calculate_special_code_per_day(
+                special_code_distribution,
+                workpack_info['workpack_days']
+            )
+
+        logger.log_separator()
+        logger.log("SUMMARY")
+        logger.log_separator()
+        logger.log(f"Total Base Man-Hours: {hours_to_hhmm(total_base_mhrs)}")
+        logger.log(f"Type Coefficient Additional Hours: {hours_to_hhmm(type_coefficient_hours)}")
+        if bonus_hours > 0:
+            logger.log(f"Bonus Hours: +{hours_to_hhmm(bonus_hours)}")
+        logger.log(f"Total Additional Hours: {hours_to_hhmm(total_additional_hours)}")
+        logger.log(f"Final Total: {hours_to_hhmm(total_mhrs)}")
+        logger.log_separator()
+        logger.log("")
+
+        # Return structured data dictionary
+        return {
+            'total_mhrs': total_mhrs,
+            'total_base_mhrs': total_base_mhrs,
+            'total_additional_hours': total_additional_hours,
+            'bonus_breakdown': combined_bonus_breakdown,  # Combined bonus + type coefficient
+            'total_mhrs_hhmm': hours_to_hhmm(total_mhrs),
+            'total_base_mhrs_hhmm': hours_to_hhmm(total_base_mhrs),
+            'ac_type': ac_type,
+            'ac_name': ac_name,
+            'wp_type': wp_type,
+            'special_code_distribution': special_code_distribution,
+            'special_code_per_day': special_code_per_day,
+            'workpack_days': workpack_info['workpack_days'],
+            'start_date': workpack_info['start_date'],
+            'end_date': workpack_info['end_date'],
+            'enable_special_code': enable_special_code_processing,
+            'enable_tool_control': ENABLE_TOOL_CONTROL,
+            'tool_control_issues': tool_control_issues,
+            'high_mhrs_tasks': high_mhrs_tasks,
+            'new_task_ids_with_seq': new_task_ids_with_seq,
+            'debug_sample': random_sample,
+            'high_mhrs_threshold': HIGH_MHRS_HOURS
+        }
 
 
 def identify_new_task_ids(df_processed, reference_task_ids, reference_eo_ids):

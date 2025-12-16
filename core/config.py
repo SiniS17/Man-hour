@@ -52,13 +52,16 @@ AC_TYPE_TYPE_COLUMN = config.get('ReferenceSheet', 'ac_type_type_column', fallba
 
 # Type coefficient configuration
 TYPE_COEFFICIENT_FILE = config.get('ReferenceSheet', 'type_coefficient_file', fallback='Standard_Work_Coe.xlsx')
-TYPE_COEFF_FUNCTION_COLUMN = config.get('ReferenceSheet', 'type_coeff_function_column', fallback='Function')
+TYPE_COEFF_AIRCRAFT_COLUMN = config.get('ReferenceSheet', 'type_coeff_aircraft_column', fallback='AircraftCode')
+TYPE_COEFF_CHECKGROUP_COLUMN = config.get('ReferenceSheet', 'type_coeff_checkgroup_column', fallback='CheckGroup')
+TYPE_COEFF_FUNCTION_COLUMN = config.get('ReferenceSheet', 'type_coeff_function_column', fallback='FuncGroup')
 TYPE_COEFF_COLUMN = config.get('ReferenceSheet', 'type_coeff_column', fallback='Coeff')
+TYPE_COEFF_ISACTIVE_COLUMN = config.get('ReferenceSheet', 'type_coeff_isactive_column', fallback='IsActive')
 
 # Check type mapping (first letter of wp_type -> check type)
-CHECK_TYPE_A = config.get('ReferenceSheet', 'check_type_a', fallback='A-check')
-CHECK_TYPE_C = config.get('ReferenceSheet', 'check_type_c', fallback='C-check')
-CHECK_TYPE_Y = config.get('ReferenceSheet', 'check_type_y', fallback='Y-check')
+CHECK_TYPE_A = config.get('ReferenceSheet', 'check_type_a', fallback='A-CHECK')
+CHECK_TYPE_C = config.get('ReferenceSheet', 'check_type_c', fallback='C-CHECK')
+CHECK_TYPE_Y = config.get('ReferenceSheet', 'check_type_y', fallback='Y-CHECK')
 
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
@@ -104,13 +107,13 @@ def get_check_type_from_wp_type(wp_type):
         wp_type: Work package type (e.g., "A06", "C12", "Y01")
 
     Returns:
-        str: Check type (e.g., "A-check", "C-check", "Y-check")
+        str: Check type (e.g., "A-CHECK", "C-CHECK", "Y-CHECK")
 
     Examples:
         >>> get_check_type_from_wp_type("A06")
-        'A-check'
+        'A-CHECK'
         >>> get_check_type_from_wp_type("C12")
-        'C-check'
+        'C-CHECK'
     """
     if not wp_type:
         return None
@@ -147,8 +150,11 @@ def print_config():
     print(f"Aircraft Registration Column: {AC_TYPE_REGISTRATION_COLUMN}")
     print(f"Aircraft Type Column: {AC_TYPE_TYPE_COLUMN}")
     print(f"Type Coefficient File: {TYPE_COEFFICIENT_FILE}")
+    print(f"Type Coeff Aircraft Column: {TYPE_COEFF_AIRCRAFT_COLUMN}")
+    print(f"Type Coeff CheckGroup Column: {TYPE_COEFF_CHECKGROUP_COLUMN}")
     print(f"Type Coeff Function Column: {TYPE_COEFF_FUNCTION_COLUMN}")
     print(f"Type Coefficient Column: {TYPE_COEFF_COLUMN}")
+    print(f"Type Coeff IsActive Column: {TYPE_COEFF_ISACTIVE_COLUMN}")
     print(f"Check Type A: {CHECK_TYPE_A}")
     print(f"Check Type C: {CHECK_TYPE_C}")
     print(f"Check Type Y: {CHECK_TYPE_Y}")

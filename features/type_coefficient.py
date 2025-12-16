@@ -2,37 +2,60 @@
 Type Coefficient Module
 Handles type coefficient lookup and application based on special type column
 
-NEW LOGIC:
-1. Take first letter of wp_type (e.g., "A06" -> "A" -> "A-check")
-2. Look up coefficient using: ac_type + check_type + special_type (from "Function" column)
-3. Formula: Adjusted Hours = Base Hours × Coefficient
+LOGIC:
+1. Load coefficient file (single sheet, sheet name is irrelevant)
+2. Filter by IsActive = TRUE
+3. Look up using: AircraftCode + CheckGroup + FuncGroup
+4. Formula: Adjusted Hours = Base Hours × Coeff
 """
 
 import pandas as pd
 import os
 from core.config import (REFERENCE_FOLDER, TYPE_COEFFICIENT_FILE,
+                         TYPE_COEFF_AIRCRAFT_COLUMN, TYPE_COEFF_CHECKGROUP_COLUMN,
                          TYPE_COEFF_FUNCTION_COLUMN, TYPE_COEFF_COLUMN,
+                         TYPE_COEFF_ISACTIVE_COLUMN,
                          SPECIAL_TYPE_COLUMN, TYPE_COEFFICIENT_PER_SEQ,
                          SEQ_NO_COLUMN, get_check_type_from_wp_type)
+
+# Global logger instance (will be set by data_processor)
+_logger = None
+
+
+def set_logger(logger):
+    """Set the logger instance for this module"""
+    global _logger
+    _logger = logger
+
+
+def log(message, to_console=True):
+    """Write to log and optionally console"""
+    if _logger:
+        _logger.log(message, to_console)
+    else:
+        if to_console:
+            print(message)
 
 
 def load_type_coefficient_lookup():
     """
     Load type coefficients from the coefficient file.
 
-    Expected structure in Standard_Work_Coe.xlsx:
-    - Each sheet can have multiple rows
-    - Columns: AircraftCode, Function (special type), Coeff
-    - Sheet names represent check types (e.g., "A-check", "C-check", "Y-check")
+    Structure:
+    - Single file with one or more sheets (sheet names are irrelevant)
+    - Required columns: AircraftCode, CheckGroup, FuncGroup, Coeff
+    - Optional column: IsActive (if present, only load rows where IsActive = TRUE)
+
+    Lookup key: CheckGroup -> AircraftCode -> FuncGroup -> Coeff
 
     Returns:
-        dict: Nested dictionary {check_type: {ac_type: {function: coefficient}}}
+        dict: Nested dictionary {check_group: {aircraft_code: {func_group: coeff}}}
     """
     coeff_file_path = os.path.join(REFERENCE_FOLDER, TYPE_COEFFICIENT_FILE)
 
     if not os.path.exists(coeff_file_path):
-        print(f"Info: Type coefficient file not found at {coeff_file_path}")
-        print(f"      No type coefficients will be applied (defaulting to 1.0)")
+        log(f"Info: Type coefficient file not found at {coeff_file_path}")
+        log(f"      No type coefficients will be applied (defaulting to 1.0)")
         return {}
 
     try:
@@ -41,157 +64,153 @@ def load_type_coefficient_lookup():
 
         coeff_lookup = {}
 
-        print(f"\n{'='*80}")
-        print(f"LOADING TYPE COEFFICIENTS from {TYPE_COEFFICIENT_FILE}")
-        print(f"{'='*80}")
-        print(f"Found {len(excel_file.sheet_names)} sheets to process")
-        print(f"Column mapping: Function='{TYPE_COEFF_FUNCTION_COLUMN}', Coeff='{TYPE_COEFF_COLUMN}'")
+        log("")
+        log("="*80)
+        log(f"LOADING TYPE COEFFICIENTS from {TYPE_COEFFICIENT_FILE}")
+        log("="*80)
+        log(f"Found {len(excel_file.sheet_names)} sheet(s) - will process all (sheet names irrelevant)")
+        log(f"Required columns: {TYPE_COEFF_AIRCRAFT_COLUMN}, {TYPE_COEFF_CHECKGROUP_COLUMN}, {TYPE_COEFF_FUNCTION_COLUMN}, {TYPE_COEFF_COLUMN}")
+        if TYPE_COEFF_ISACTIVE_COLUMN:
+            log(f"Filter column: {TYPE_COEFF_ISACTIVE_COLUMN} (only TRUE)")
 
         total_rows_processed = 0
+        total_rows_skipped_inactive = 0
 
+        # Process ALL sheets (combine them)
+        all_data = []
         for sheet_name in excel_file.sheet_names:
-            # Read the sheet
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
+            log(f"\n  Reading sheet '{sheet_name}': {len(df)} rows")
+            all_data.append(df)
 
-            print(f"\n  Processing sheet '{sheet_name}'...")
+        # Combine all sheets into one dataframe
+        df_combined = pd.concat(all_data, ignore_index=True)
+        log(f"\nCombined total: {len(df_combined)} rows from all sheets")
 
-            # The sheet name is the check type (e.g., "A-check", "C-check", "Y-check")
-            check_type = sheet_name
+        # Check for required columns
+        required_cols = [TYPE_COEFF_AIRCRAFT_COLUMN, TYPE_COEFF_CHECKGROUP_COLUMN,
+                        TYPE_COEFF_FUNCTION_COLUMN, TYPE_COEFF_COLUMN]
+        missing_cols = [col for col in required_cols if col not in df_combined.columns]
 
-            # Check for required columns
-            missing_cols = []
+        if missing_cols:
+            log(f"ERROR: Missing required columns: {missing_cols}")
+            log(f"Available columns: {list(df_combined.columns)}")
+            return {}
 
-            # We need to find the aircraft code column - it might be named differently
-            # Common names: AircraftCode, Aircraft, Type, etc.
-            aircraft_col = None
-            for possible_col in ['AircraftCode', 'Aircraft', 'Type', 'AC']:
-                if possible_col in df.columns:
-                    aircraft_col = possible_col
-                    break
+        # Filter by IsActive = TRUE if column exists
+        if TYPE_COEFF_ISACTIVE_COLUMN and TYPE_COEFF_ISACTIVE_COLUMN in df_combined.columns:
+            rows_before = len(df_combined)
+            df_combined = df_combined[df_combined[TYPE_COEFF_ISACTIVE_COLUMN] == True].copy()
+            total_rows_skipped_inactive = rows_before - len(df_combined)
+            log(f"\nFiltered by {TYPE_COEFF_ISACTIVE_COLUMN} = TRUE:")
+            log(f"  Active rows: {len(df_combined)}")
+            log(f"  Skipped (inactive): {total_rows_skipped_inactive}")
 
-            if not aircraft_col:
-                print(f"    WARNING: Could not find aircraft code column")
-                print(f"    Available columns: {list(df.columns)}")
+        log(f"\nProcessing {len(df_combined)} active rows...")
+
+        # Process each row
+        for idx, row in df_combined.iterrows():
+            # Get aircraft code
+            aircraft_code = str(row[TYPE_COEFF_AIRCRAFT_COLUMN]).strip()
+            if pd.isna(row[TYPE_COEFF_AIRCRAFT_COLUMN]) or aircraft_code.lower() in ['nan', '', 'none']:
                 continue
 
-            if TYPE_COEFF_FUNCTION_COLUMN not in df.columns:
-                missing_cols.append(TYPE_COEFF_FUNCTION_COLUMN)
-            if TYPE_COEFF_COLUMN not in df.columns:
-                missing_cols.append(TYPE_COEFF_COLUMN)
-
-            if missing_cols:
-                print(f"    WARNING: Missing columns: {missing_cols}")
-                print(f"    Available columns: {list(df.columns)}")
+            # Get check group
+            check_group = str(row[TYPE_COEFF_CHECKGROUP_COLUMN]).strip()
+            if pd.isna(row[TYPE_COEFF_CHECKGROUP_COLUMN]) or check_group.lower() in ['nan', '', 'none']:
                 continue
 
-            print(f"    Using aircraft column: '{aircraft_col}'")
+            # Get function group
+            func_group = str(row[TYPE_COEFF_FUNCTION_COLUMN]).strip()
+            if pd.isna(row[TYPE_COEFF_FUNCTION_COLUMN]) or func_group.lower() in ['nan', '', 'none']:
+                continue
 
-            # Process each row in the sheet
-            rows_in_sheet = 0
+            # Get coefficient
+            try:
+                coeff = float(row[TYPE_COEFF_COLUMN])
+            except (ValueError, TypeError):
+                log(f"  WARNING: Invalid coefficient value at row {idx}")
+                continue
 
-            for idx, row in df.iterrows():
-                # Get aircraft type
-                ac_type = str(row[aircraft_col]).strip()
+            # Store: check_group -> aircraft_code -> func_group -> coeff
+            if check_group not in coeff_lookup:
+                coeff_lookup[check_group] = {}
+            if aircraft_code not in coeff_lookup[check_group]:
+                coeff_lookup[check_group][aircraft_code] = {}
 
-                # Skip rows with empty/invalid aircraft types
-                if pd.isna(row[aircraft_col]) or ac_type.lower() in ['nan', '', 'none']:
-                    continue
-
-                # Get function (special type)
-                function = str(row[TYPE_COEFF_FUNCTION_COLUMN]).strip()
-
-                # Skip rows with empty/invalid functions
-                if pd.isna(row[TYPE_COEFF_FUNCTION_COLUMN]) or function.lower() in ['nan', '', 'none']:
-                    continue
-
-                # Get coefficient value
-                try:
-                    coefficient = float(row[TYPE_COEFF_COLUMN])
-                except (ValueError, TypeError):
-                    print(f"    WARNING: Invalid coefficient value in row {idx}")
-                    continue
-
-                # Initialize nested dict if needed
-                if check_type not in coeff_lookup:
-                    coeff_lookup[check_type] = {}
-                if ac_type not in coeff_lookup[check_type]:
-                    coeff_lookup[check_type][ac_type] = {}
-
-                # Store the coefficient: check_type -> ac_type -> function -> coefficient
-                coeff_lookup[check_type][ac_type][function] = coefficient
-                rows_in_sheet += 1
-                total_rows_processed += 1
-
-            print(f"    Loaded {rows_in_sheet} rows from sheet '{sheet_name}'")
+            coeff_lookup[check_group][aircraft_code][func_group] = coeff
+            total_rows_processed += 1
 
         # Print summary
-        print(f"\n{'='*80}")
-        print(f"✓ Successfully loaded type coefficients:")
-        print(f"  - Total rows processed: {total_rows_processed}")
-        print(f"  - Check types found: {len(coeff_lookup)}")
-        for check_type in sorted(coeff_lookup.keys()):
-            ac_types = len(coeff_lookup[check_type])
-            total_functions = sum(len(functions) for functions in coeff_lookup[check_type].values())
-            print(f"    • {check_type}: {ac_types} aircraft types, {total_functions} functions")
-        print(f"{'='*80}\n")
+        log("")
+        log("="*80)
+        log(f"✓ Successfully loaded type coefficients:")
+        log(f"  - Total rows processed: {total_rows_processed}")
+        if total_rows_skipped_inactive > 0:
+            log(f"  - Rows skipped (inactive): {total_rows_skipped_inactive}")
+        log(f"  - Check groups found: {len(coeff_lookup)}")
+
+        for check_group in sorted(coeff_lookup.keys()):
+            aircraft_count = len(coeff_lookup[check_group])
+            func_count = sum(len(funcs) for funcs in coeff_lookup[check_group].values())
+            log(f"    • {check_group}: {aircraft_count} aircraft, {func_count} functions")
+        log("="*80)
+        log("")
 
         return coeff_lookup
 
     except Exception as e:
-        print(f"ERROR loading type coefficient file: {e}")
+        log(f"ERROR loading type coefficient file: {e}")
         import traceback
-        traceback.print_exc()
+        log(traceback.format_exc())
         return {}
 
 
-def get_type_coefficient(ac_type, check_type, special_type, coeff_lookup):
+def get_type_coefficient(aircraft_code, check_group, func_group, coeff_lookup):
     """
-    Look up type coefficient for given ac_type, check_type, and special_type (function).
+    Look up type coefficient.
 
     Args:
-        ac_type: Aircraft type (e.g., "B787")
-        check_type: Check type (e.g., "A-check", "C-check", "Y-check")
-        special_type: Special type from input file (matches "Function" column)
+        aircraft_code: Aircraft code (e.g., "B787")
+        check_group: Check group (e.g., "A-CHECK")
+        func_group: Function group from input file (e.g., "DIS", "LUB")
         coeff_lookup: Dictionary from load_type_coefficient_lookup()
 
     Returns:
         float: Coefficient (1.0 if not found)
     """
-    # Default coefficient
     default_coeff = 1.0
 
     if not coeff_lookup:
         return default_coeff
 
-    if ac_type is None or check_type is None:
+    if not aircraft_code or not check_group or not func_group:
         return default_coeff
 
-    if special_type is None or pd.isna(special_type) or str(special_type).strip() == '':
+    aircraft_code = str(aircraft_code).strip()
+    check_group = str(check_group).strip()
+    func_group = str(func_group).strip()
+
+    # Lookup: check_group -> aircraft_code -> func_group
+    if check_group not in coeff_lookup:
         return default_coeff
 
-    special_type_str = str(special_type).strip()
-
-    # Look up: check_type -> ac_type -> function
-    if check_type not in coeff_lookup:
+    if aircraft_code not in coeff_lookup[check_group]:
         return default_coeff
 
-    if ac_type not in coeff_lookup[check_type]:
+    if func_group not in coeff_lookup[check_group][aircraft_code]:
         return default_coeff
 
-    if special_type_str not in coeff_lookup[check_type][ac_type]:
-        return default_coeff
-
-    coefficient = coeff_lookup[check_type][ac_type][special_type_str]
-    return coefficient
+    return coeff_lookup[check_group][aircraft_code][func_group]
 
 
 def apply_type_coefficients(df, ac_type, wp_type, coeff_lookup):
     """
-    Apply type coefficients to the DataFrame based on special type column.
+    Apply type coefficients to the DataFrame.
 
     Process:
-    1. Extract check type from wp_type (e.g., "A06" -> "A-check")
-    2. For each row, look up coefficient using: ac_type + check_type + special_type
+    1. Get check_group from wp_type (e.g., "A06" -> "A-CHECK")
+    2. For each row, lookup coefficient using: ac_type + check_group + special_type
     3. Calculate: Adjusted Hours = Base Hours × Coefficient
 
     Args:
@@ -203,126 +222,122 @@ def apply_type_coefficients(df, ac_type, wp_type, coeff_lookup):
     Returns:
         DataFrame: Updated DataFrame with 'Type Coefficient' and 'Adjusted Hours' columns
     """
-    # Get check type from wp_type (e.g., "A06" -> "A-check")
-    check_type = get_check_type_from_wp_type(wp_type)
+    # Get check group from wp_type
+    check_group = get_check_type_from_wp_type(wp_type)
 
     # Check if special type column exists
     has_special_type = SPECIAL_TYPE_COLUMN in df.columns
 
     if not has_special_type:
-        print(f"Info: Column '{SPECIAL_TYPE_COLUMN}' not found in input file")
-        print(f"      Using default coefficient of 1.0 for all rows")
+        log(f"Info: Column '{SPECIAL_TYPE_COLUMN}' not found in input file")
+        log(f"      Using default coefficient of 1.0 for all rows")
         df['Type Coefficient'] = 1.0
         df['Adjusted Hours'] = df['Base Hours'].copy()
         return df
 
-    print(f"\n{'='*80}")
-    print(f"TYPE COEFFICIENT APPLICATION")
-    print(f"{'='*80}")
-    print(f"Aircraft Type: '{ac_type}'")
-    print(f"WP Type: '{wp_type}' -> Check Type: '{check_type}'")
-    print(f"Special Type Column: '{SPECIAL_TYPE_COLUMN}'")
-    print(f"Mode: {'Per SEQ (once per SEQ)' if TYPE_COEFFICIENT_PER_SEQ else 'Per Row (all rows)'}")
+    log("")
+    log("="*80)
+    log("TYPE COEFFICIENT APPLICATION")
+    log("="*80)
+    log(f"Aircraft Code: '{ac_type}'")
+    log(f"WP Type: '{wp_type}' -> Check Group: '{check_group}'")
+    log(f"Function Column: '{SPECIAL_TYPE_COLUMN}'")
+    log(f"Mode: {'Per SEQ (once per SEQ)' if TYPE_COEFFICIENT_PER_SEQ else 'Per Row (all rows)'}")
 
-    if not check_type:
-        print(f"WARNING: Could not determine check type from wp_type '{wp_type}'")
-        print(f"         Using default coefficient of 1.0 for all rows")
+    if not check_group:
+        log(f"WARNING: Could not determine check group from wp_type '{wp_type}'")
+        log(f"         Using default coefficient of 1.0 for all rows")
         df['Type Coefficient'] = 1.0
         df['Adjusted Hours'] = df['Base Hours'].copy()
         return df
 
-    # Apply coefficient for each row based on its special type
+    # Apply coefficient for each row
     def get_row_coefficient(row):
-        special_type = row.get(SPECIAL_TYPE_COLUMN)
-        return get_type_coefficient(ac_type, check_type, special_type, coeff_lookup)
+        func_group = row.get(SPECIAL_TYPE_COLUMN)
+        coeff = get_type_coefficient(ac_type, check_group, func_group, coeff_lookup)
+        return coeff
 
     df['Type Coefficient'] = df.apply(get_row_coefficient, axis=1)
     df['Adjusted Hours'] = df['Base Hours'] * df['Type Coefficient']
 
-    # Print summary of coefficients applied
-    print(f"\nCoefficient Distribution:")
+    # Print summary
+    log(f"\nCoefficient Distribution:")
     coeff_counts = df['Type Coefficient'].value_counts().sort_index()
     for coeff, count in coeff_counts.items():
-        print(f"  {coeff:.2f}: {count} rows")
+        log(f"  {coeff:.2f}: {count} rows")
 
-    # Show sample of special types and their coefficients
+    # Show sample mappings
     if SPECIAL_TYPE_COLUMN in df.columns:
-        special_type_sample = df[[SPECIAL_TYPE_COLUMN, 'Type Coefficient']].drop_duplicates().head(10)
-        print(f"\nSpecial Type -> Coefficient Mapping (first 10):")
-        for idx, row in special_type_sample.iterrows():
-            st = row[SPECIAL_TYPE_COLUMN]
+        sample = df[[SPECIAL_TYPE_COLUMN, 'Type Coefficient']].drop_duplicates().head(15)
+        log(f"\nFunction -> Coefficient Mapping (first 15):")
+        for idx, row in sample.iterrows():
+            func = row[SPECIAL_TYPE_COLUMN]
             coeff = row['Type Coefficient']
-            print(f"  '{st}' -> {coeff:.2f}")
+            log(f"  '{func}' -> {coeff:.2f}")
 
-    print(f"{'='*80}\n")
+    log("="*80)
+    log("")
 
     return df
 
 
 def calculate_type_coefficient_breakdown(df_original, df_processed):
     """
-    Calculate type coefficient bonus breakdown by special type.
-
-    This calculates: (Adjusted Hours - Base Hours) for each special type
+    Calculate type coefficient breakdown by function group.
 
     Args:
         df_original: Original DataFrame (before deduplication)
         df_processed: Processed DataFrame (after deduplication if per_seq=True)
 
     Returns:
-        dict: {special_type: additional_hours}
+        dict: {func_group: additional_hours}
     """
-    print(f"\n{'='*80}")
-    print(f"TYPE COEFFICIENT BREAKDOWN CALCULATION")
-    print(f"{'='*80}")
-    print(f"Mode: {'Per SEQ (deduplicated)' if TYPE_COEFFICIENT_PER_SEQ else 'Per Row (all rows)'}")
-    print(f"Original rows: {len(df_original)}")
-    print(f"Processed rows (after dedup): {len(df_processed)}")
+    log("")
+    log("="*80)
+    log("TYPE COEFFICIENT BREAKDOWN")
+    log("="*80)
+    log(f"Mode: {'Per SEQ (deduplicated)' if TYPE_COEFFICIENT_PER_SEQ else 'Per Row (all rows)'}")
 
-    # Use the appropriate dataframe based on TYPE_COEFFICIENT_PER_SEQ setting
-    if TYPE_COEFFICIENT_PER_SEQ:
-        df_to_use = df_processed
-        print(f"Using: Processed (deduplicated) data")
-    else:
-        df_to_use = df_original
-        print(f"Using: Original (all rows) data")
+    df_to_use = df_processed if TYPE_COEFFICIENT_PER_SEQ else df_original
 
-    # Check if special type column exists
+    log(f"Using: {len(df_to_use)} rows")
+
     if SPECIAL_TYPE_COLUMN not in df_to_use.columns:
-        print("No special type column found - returning empty breakdown")
-        print(f"{'='*80}\n")
+        log("No function column found")
+        log("="*80)
         return {}
 
     breakdown = {}
+    total_base = 0
+    total_adjusted = 0
 
-    print(f"\nBreakdown by Special Type:")
+    log(f"\nBy Function Group:")
 
-    # Group by special type and calculate additional hours
-    for special_type in df_to_use[SPECIAL_TYPE_COLUMN].unique():
-        if pd.isna(special_type) or str(special_type).strip() == '':
+    for func_group in df_to_use[SPECIAL_TYPE_COLUMN].unique():
+        if pd.isna(func_group) or str(func_group).strip() == '':
             continue
 
-        # Get all rows with this special type
-        special_type_rows = df_to_use[df_to_use[SPECIAL_TYPE_COLUMN] == special_type]
+        rows = df_to_use[df_to_use[SPECIAL_TYPE_COLUMN] == func_group]
+        base = rows['Base Hours'].sum()
+        adjusted = rows['Adjusted Hours'].sum()
+        additional = adjusted - base
 
-        if len(special_type_rows) == 0:
-            continue
+        total_base += base
+        total_adjusted += adjusted
 
-        # Calculate additional hours: (Adjusted - Base)
-        base_hours = special_type_rows['Base Hours'].sum()
-        adjusted_hours = special_type_rows['Adjusted Hours'].sum()
-        additional_hours = adjusted_hours - base_hours
+        log(f"  '{func_group}': {len(rows)} rows, Base={base:.2f}h, Adjusted={adjusted:.2f}h, Additional={additional:.2f}h")
 
-        print(f"  '{special_type}':")
-        print(f"    Rows: {len(special_type_rows)}")
-        print(f"    Base: {base_hours:.2f}h, Adjusted: {adjusted_hours:.2f}h, Additional: {additional_hours:.2f}h")
+        if abs(additional) > 0.01:
+            breakdown[str(func_group)] = additional
 
-        # Only add to breakdown if there's an actual difference
-        if abs(additional_hours) > 0.01:  # Avoid floating point errors
-            breakdown[str(special_type)] = additional_hours
+    log(f"\n--- TOTALS ---")
+    log(f"Total Base: {total_base:.2f}h")
+    log(f"Total Adjusted: {total_adjusted:.2f}h")
+    log(f"Total Additional: {(total_adjusted - total_base):.2f}h")
+    log(f"Sum of breakdown: {sum(breakdown.values()):.2f}h")
+    log("="*80)
+    log("")
 
-    print(f"\nFinal Breakdown: {breakdown}")
-    print(f"{'='*80}\n")
     return breakdown
 
 
@@ -331,28 +346,14 @@ def calculate_total_type_coefficient_hours(df_original, df_processed):
     Calculate total additional hours from type coefficients.
 
     Args:
-        df_original: Original DataFrame (before deduplication)
-        df_processed: Processed DataFrame (after deduplication if per_seq=True)
+        df_original: Original DataFrame
+        df_processed: Processed DataFrame
 
     Returns:
-        float: Total additional hours from type coefficients
+        float: Total additional hours
     """
-    # Use the appropriate dataframe based on TYPE_COEFFICIENT_PER_SEQ setting
-    if TYPE_COEFFICIENT_PER_SEQ:
-        df_to_use = df_processed
-    else:
-        df_to_use = df_original
+    df_to_use = df_processed if TYPE_COEFFICIENT_PER_SEQ else df_original
 
     total_base = df_to_use['Base Hours'].sum()
     total_adjusted = df_to_use['Adjusted Hours'].sum()
-    total_additional = total_adjusted - total_base
-
-    print(f"\n{'='*80}")
-    print(f"TOTAL TYPE COEFFICIENT HOURS")
-    print(f"{'='*80}")
-    print(f"Total Base Hours: {total_base:.2f}")
-    print(f"Total Adjusted Hours: {total_adjusted:.2f}")
-    print(f"Total Additional Hours: {total_additional:.2f}")
-    print(f"{'='*80}\n")
-
-    return total_additional
+    return total_adjusted - total_base
