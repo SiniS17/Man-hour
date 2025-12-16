@@ -1,11 +1,10 @@
 """
 Main Orchestration Module
 Coordinates the entire workpack processing workflow
-
-This is the entry point for the application.
-Run this file to process all files in the INPUT folder.
+REFACTORED: Now uses centralized logging system
 """
 
+from utils.logger import WorkpackLogger, info, error, warning
 from core.config import print_config
 from core.data_loader import load_input_files, load_reference_ids
 from core.data_processor import process_data
@@ -20,64 +19,63 @@ def main():
     1. Print and verify configuration
     2. Load input files from INPUT folder
     3. Load reference data (Task IDs and EO IDs)
-    4. Process each input file:
-       - Extract task IDs
-       - Apply coefficients
-       - Calculate man-hours
-       - Check tool availability (if enabled)
-       - Identify new task IDs
-    5. Generate output reports:
-       - Excel file with multiple sheets
-       - Debug log
+    4. Process each input file
+    5. Generate output reports
 
     Returns:
         None
     """
-    print("=" * 80)
-    print("WORKPACK DATA PROCESSING SYSTEM")
-    print("=" * 80)
-    print()
+    # Initialize logging system
+    wl = WorkpackLogger()
+
+    info("="*80)
+    info("WORKPACK DATA PROCESSING SYSTEM")
+    info("="*80)
+    info("")
 
     # Step 1: Print configuration for verification
-    print("Configuration:")
-    print("-" * 80)
+    info("Configuration:")
+    info("-"*80)
     print_config()
-    print()
-    print("=" * 80)
-    print()
+    info("")
+    info("="*80)
+    info("")
 
     # Step 2: Load input files
-    print("Step 1: Loading Input Files")
-    print("-" * 80)
+    info("Step 1: Loading Input Files")
+    info("-"*80)
     input_files = load_input_files()
 
     if not input_files:
-        print("No input files to process. Exiting.")
-        print()
-        print("Please place Excel files (.xlsx) in the INPUT folder.")
+        error("No input files to process. Exiting.")
+        info("")
+        info("Please place Excel files (.xlsx) in the INPUT folder.")
         return
 
-    print(f"Found {len(input_files)} file(s) to process")
-    print()
-    print("=" * 80)
-    print()
+    info(f"Found {len(input_files)} file(s) to process")
+    info("")
+    info("="*80)
+    info("")
 
     # Step 3: Load reference data
-    print("Step 2: Loading Reference Data")
-    print("-" * 80)
+    info("Step 2: Loading Reference Data")
+    info("-"*80)
     reference_data = load_reference_ids()
-    print()
-    print("=" * 80)
-    print()
+    info("")
+    info("="*80)
+    info("")
 
     # Step 4: Process each file
-    print("Step 3: Processing Files")
-    print("=" * 80)
-    print()
+    info("Step 3: Processing Files")
+    info("="*80)
+    info("")
+
+    successful_count = 0
+    failed_count = 0
 
     for idx, input_file in enumerate(input_files, 1):
-        print(f"Processing file {idx}/{len(input_files)}: {input_file}")
-        print("-" * 80)
+        info(f"Processing file {idx}/{len(input_files)}: {input_file}")
+        info("-"*80)
 
         try:
             # Process the data
@@ -86,30 +84,37 @@ def main():
             # Save the output
             save_output_file(input_file, processed_data)
 
-            print(f"✓ Successfully processed {input_file}")
-            print()
+            info(f"✓ Successfully processed {input_file}")
+            info("")
+            successful_count += 1
 
         except Exception as e:
-            print(f"✗ Error processing {input_file}: {e}")
-            print(f"Skipping to next file...")
-            print()
+            error(f"✗ Error processing {input_file}: {e}")
+            error(f"Skipping to next file...")
+            info("")
+            failed_count += 1
             continue
 
-        print("-" * 80)
-        print()
+        info("-"*80)
+        info("")
 
     # Step 5: Summary
-    print("=" * 80)
-    print("PROCESSING COMPLETE")
-    print("=" * 80)
-    print()
-    print(f"✓ All files processed successfully!")
-    print()
-    print("Output files location:")
-    print(f"  - Excel reports: OUTPUT/")
-    print(f"  - Debug logs: LOG/")
-    print()
-    print("=" * 80)
+    info("="*80)
+    info("PROCESSING COMPLETE")
+    info("="*80)
+    info("")
+
+    if failed_count == 0:
+        info(f"✓ All {successful_count} file(s) processed successfully!")
+    else:
+        warning(f"Completed with {successful_count} successful, {failed_count} failed")
+
+    info("")
+    info("Output files location:")
+    info("  - Excel reports: OUTPUT/")
+    info("  - Processing logs: LOG/")
+    info("")
+    info("="*80)
 
 
 def quick_test():
@@ -117,35 +122,46 @@ def quick_test():
     Quick test function to verify the system is working.
     Run this to check configuration and imports without processing files.
     """
-    print("=" * 80)
-    print("QUICK SYSTEM TEST")
-    print("=" * 80)
-    print()
+    info("="*80)
+    info("QUICK SYSTEM TEST")
+    info("="*80)
+    info("")
 
-    print("Testing imports...")
+    info("Testing imports...")
     try:
         from core import config, data_loader, data_processor, id_extractor
-        from features import special_code, coefficients, tool_control
-        from writers import excel_writer, debug_logger
-        from utils import time_utils, validation, formatters
-        print("✓ All imports successful")
+        from features import special_code, type_coefficient, tool_control
+        from writers import excel_writer
+        from utils import time_utils, validation, formatters, logger
+        info("✓ All imports successful")
     except ImportError as e:
-        print(f"✗ Import error: {e}")
+        error(f"✗ Import error: {e}")
         return False
 
-    print()
-    print("Testing configuration...")
+    info("")
+    info("Testing configuration...")
     try:
         print_config()
-        print("✓ Configuration loaded successfully")
+        info("✓ Configuration loaded successfully")
     except Exception as e:
-        print(f"✗ Configuration error: {e}")
+        error(f"✗ Configuration error: {e}")
         return False
 
-    print()
-    print("=" * 80)
-    print("✓ SYSTEM TEST PASSED")
-    print("=" * 80)
+    info("")
+    info("Testing logging system...")
+    try:
+        from utils.logger import get_logger
+        test_logger = get_logger(module_name="test")
+        test_logger.info("Test message")
+        info("✓ Logging system working")
+    except Exception as e:
+        error(f"✗ Logging system error: {e}")
+        return False
+
+    info("")
+    info("="*80)
+    info("✓ SYSTEM TEST PASSED")
+    info("="*80)
 
     return True
 

@@ -1,27 +1,22 @@
 """
 Tool Control Module - Separate from man-hour calculations
-
-This module checks tool/spare availability independently.
-It processes EVERY row in the input file without any deduplication,
-because each row represents a different part requirement.
-
-Now includes ignore list functionality to filter out common/easily obtainable items.
+REFACTORED: Now uses centralized logging system
 """
 
 import pandas as pd
 import os
+from utils.logger import get_logger
 from core.config import (SEQ_NO_COLUMN, TITLE_COLUMN,
                          TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
                          TOTAL_QTY_COLUMN, ALT_QTY_COLUMN, config)
+
+# Get module-specific logger
+logger = get_logger(module_name="tool_control")
 
 
 def load_ignore_items():
     """
     Load items to ignore from ignore_item.txt file.
-
-    File should be located in the REFERENCE folder.
-    Each line is an item to ignore (case-insensitive).
-    Lines starting with # are comments.
 
     Returns:
         set: Set of items (lowercase) to ignore
@@ -32,14 +27,13 @@ def load_ignore_items():
     ignore_items = set()
 
     if not os.path.exists(ignore_file):
-        print(f"Info: ignore_item.txt not found at {ignore_file}")
-        print("      No items will be ignored during tool control checking")
+        logger.info(f"ignore_item.txt not found at {ignore_file}")
+        logger.info("No items will be ignored during tool control checking")
         return ignore_items
 
     try:
         with open(ignore_file, 'r', encoding='utf-8') as f:
             for line in f:
-                # Strip whitespace and convert to lowercase
                 item = line.strip()
 
                 # Skip empty lines and comments
@@ -50,13 +44,13 @@ def load_ignore_items():
                 ignore_items.add(item.lower())
 
         if ignore_items:
-            print(f"Tool Control: Loaded {len(ignore_items)} items to ignore from ignore_item.txt")
+            logger.info(f"Loaded {len(ignore_items)} items to ignore from ignore_item.txt")
         else:
-            print(f"Tool Control: ignore_item.txt is empty, no items will be ignored")
+            logger.info("ignore_item.txt is empty, no items will be ignored")
 
     except Exception as e:
-        print(f"WARNING: Could not load ignore_item.txt: {e}")
-        print("         Proceeding without ignore list")
+        logger.warning(f"Could not load ignore_item.txt: {e}")
+        logger.warning("Proceeding without ignore list")
 
     return ignore_items
 
@@ -64,8 +58,6 @@ def load_ignore_items():
 def should_ignore_item(part_number, tool_name, ignore_items):
     """
     Check if an item should be ignored based on the ignore list.
-
-    Checks both part number and tool/spare name (case-insensitive).
 
     Args:
         part_number: Part number string
@@ -96,7 +88,6 @@ def should_ignore_item(part_number, tool_name, ignore_items):
 def extract_task_id_for_tool_control(row, seq_mappings, seq_id_mappings):
     """
     Extract Task ID for tool control purposes.
-    This is a standalone function that doesn't affect man-hour processing.
 
     Args:
         row: DataFrame row
@@ -117,31 +108,21 @@ def extract_task_id_for_tool_control(row, seq_mappings, seq_id_mappings):
     title = str(row[TITLE_COLUMN])
 
     if id_extraction_method == "-":
-        # Extract everything before "(" (e.g., "24-045-00 (00) - ITEM 1" -> "24-045-00")
         if "(" in title:
-            id_part = title.split("(")[0].strip()
-            return id_part
-        else:
-            return title.strip()
+            return title.split("(")[0].strip()
+        return title.strip()
     elif id_extraction_method == "/":
-        # Extract everything before the first "/"
         if "/" in title:
             return title.split("/")[0].strip()
-        else:
-            return title.strip()
+        return title.strip()
     else:
-        # Default: return the whole title
         return title.strip()
 
 
 def check_tool_availability(df, seq_mappings, seq_id_mappings):
     """
-    Check for tools/spares with zero quantity in both total_qty and altpart_total_qty.
+    Check for tools/spares with zero quantity.
     Filters out items that are in the ignore list.
-
-    IMPORTANT: This function processes EVERY row independently.
-    No deduplication is performed because each row represents a different part requirement,
-    even if they have the same SEQ or part number.
 
     Args:
         df: Full DataFrame (all rows from input file)
@@ -154,7 +135,7 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
     # Validate required columns exist
     if not all([TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
                 TOTAL_QTY_COLUMN, ALT_QTY_COLUMN]):
-        print("WARNING: Tool control columns not properly configured in settings.ini")
+        logger.warning("Tool control columns not properly configured in settings.ini")
         return pd.DataFrame()
 
     required_tool_cols = [TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
@@ -162,16 +143,16 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
     missing_cols = [col for col in required_tool_cols if col not in df.columns]
 
     if missing_cols:
-        print(f"WARNING: Tool control columns not found in file: {missing_cols}")
+        logger.warning(f"Tool control columns not found in file: {missing_cols}")
         return pd.DataFrame()
 
     # Load ignore list
     ignore_items = load_ignore_items()
 
-    # Create a working copy to avoid modifying original
+    # Create a working copy
     df_tools = df.copy()
 
-    # Convert quantity columns to numeric, treating non-numeric as 0
+    # Convert quantity columns to numeric
     df_tools[TOTAL_QTY_COLUMN] = pd.to_numeric(df_tools[TOTAL_QTY_COLUMN], errors='coerce').fillna(0)
     df_tools[ALT_QTY_COLUMN] = pd.to_numeric(df_tools[ALT_QTY_COLUMN], errors='coerce').fillna(0)
 
@@ -190,7 +171,7 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
     if len(zero_qty_items) == 0:
         return pd.DataFrame()
 
-    print(f"Tool Control: Found {len(zero_qty_items)} items with zero availability (before filtering)")
+    logger.info(f"Found {len(zero_qty_items)} items with zero availability (before filtering)")
 
     # Apply ignore list filtering
     filtered_items = []
@@ -204,20 +185,19 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
 
         if should_ignore:
             ignored_count += 1
-            # Optionally log first few ignored items
             if ignored_count <= 5:
-                print(f"  Ignoring: {part_number} - {tool_name} ({reason})")
+                logger.debug(f"Ignoring: {part_number} - {tool_name} ({reason})")
         else:
             filtered_items.append(row)
 
     if ignored_count > 0:
-        print(f"Tool Control: Ignored {ignored_count} items from ignore_item.txt")
+        logger.info(f"Ignored {ignored_count} items from ignore_item.txt")
         if ignored_count > 5:
-            print(f"              (showing first 5, {ignored_count - 5} more ignored)")
+            logger.debug(f"(showing first 5, {ignored_count - 5} more ignored)")
 
     # Convert filtered list back to DataFrame
     if not filtered_items:
-        print("Tool Control: All items with zero availability are in ignore list")
+        logger.info("All items with zero availability are in ignore list")
         return pd.DataFrame()
 
     zero_qty_items = pd.DataFrame(filtered_items)
@@ -228,7 +208,7 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
         axis=1
     )
 
-    # Map tool type: 'Y' -> 'Tool', 'N' -> 'Spare'
+    # Map tool type
     def map_tool_type(value):
         if pd.isna(value):
             return 'Unknown'
@@ -242,16 +222,12 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
 
     zero_qty_items['Type'] = zero_qty_items[TOOL_TYPE_COLUMN].apply(map_tool_type)
 
-    # Select and rename columns for output
+    # Select and rename columns
     result = zero_qty_items[[SEQ_NO_COLUMN, 'Task ID', TOOL_PARTNO_COLUMN,
                              TOOL_NAME_COLUMN, 'Type']].copy()
     result.columns = ['SEQ', 'Task ID', 'Part Number', 'Tool/Spare Name', 'Type']
 
-    # IMPORTANT: NO DEDUPLICATION
-    # Each row represents a different part requirement, so we keep ALL rows
-    # Even if they have the same SEQ, Task ID, or Part Number
-
-    # Reset index for clean output
+    # Reset index
     result = result.reset_index(drop=True)
 
     return result
@@ -260,9 +236,6 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
 def process_tool_control(input_file_path, seq_mappings, seq_id_mappings):
     """
     Main function to process tool control independently.
-
-    This function can be called separately and doesn't interfere with
-    man-hour calculations or any other processing.
 
     Args:
         input_file_path: Path to the input Excel file
@@ -276,28 +249,28 @@ def process_tool_control(input_file_path, seq_mappings, seq_id_mappings):
         # Load the uploaded file
         df = pd.read_excel(input_file_path, engine='openpyxl')
 
-        print(f"\nTool Control: Processing {len(df)} total rows from input file...")
+        logger.info(f"Processing {len(df)} total rows from input file...")
 
-        # Check tool availability on ALL rows (with ignore list filtering)
+        # Check tool availability
         tool_issues = check_tool_availability(df, seq_mappings, seq_id_mappings)
 
         if len(tool_issues) > 0:
-            print(f"Tool Control: Found {len(tool_issues)} tool/spare items requiring attention")
+            logger.info(f"Found {len(tool_issues)} tool/spare items requiring attention")
 
             # Show breakdown by type
             tool_count = len(tool_issues[tool_issues['Type'] == 'Tool'])
             spare_count = len(tool_issues[tool_issues['Type'] == 'Spare'])
-            print(f"  - Tools: {tool_count}")
-            print(f"  - Spares: {spare_count}")
+            logger.info(f"  - Tools: {tool_count}")
+            logger.info(f"  - Spares: {spare_count}")
         else:
-            print("Tool Control: All tools/spares either have adequate availability or are in ignore list")
+            logger.info("All tools/spares either have adequate availability or are in ignore list")
 
         return tool_issues
 
     except Exception as e:
-        print(f"ERROR in Tool Control processing: {e}")
+        logger.error(f"Error in Tool Control processing: {e}")
         import traceback
-        traceback.print_exc()
+        logger.debug(traceback.format_exc())
         return pd.DataFrame()
 
 
@@ -306,7 +279,7 @@ def get_tool_control_summary(tool_issues_df):
     Generate a summary of tool control issues.
 
     Args:
-        tool_issues_df: DataFrame with tool control issues (after filtering)
+        tool_issues_df: DataFrame with tool control issues
 
     Returns:
         dict: Summary statistics
@@ -326,21 +299,4 @@ def get_tool_control_summary(tool_issues_df):
         'total_spares': len(tool_issues_df[tool_issues_df['Type'] == 'Spare']),
         'unique_parts': tool_issues_df['Part Number'].nunique(),
         'affected_seqs': tool_issues_df['SEQ'].nunique()
-    }
-
-
-def get_ignore_list_info():
-    """
-    Get information about the current ignore list.
-    Useful for debugging and reporting.
-
-    Returns:
-        dict: Information about ignore list
-    """
-    ignore_items = load_ignore_items()
-
-    return {
-        'count': len(ignore_items),
-        'items': sorted(list(ignore_items)),
-        'enabled': len(ignore_items) > 0
     }

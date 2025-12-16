@@ -1,6 +1,7 @@
 """
 Configuration Module
 Loads and manages all configuration settings from settings.ini
+REFACTORED: print_config() can stay as direct output since it's for debugging
 """
 
 import configparser
@@ -58,7 +59,7 @@ TYPE_COEFF_FUNCTION_COLUMN = config.get('ReferenceSheet', 'type_coeff_function_c
 TYPE_COEFF_COLUMN = config.get('ReferenceSheet', 'type_coeff_column', fallback='Coeff')
 TYPE_COEFF_ISACTIVE_COLUMN = config.get('ReferenceSheet', 'type_coeff_isactive_column', fallback='IsActive')
 
-# Check type mapping (first letter of wp_type -> check type)
+# Check type mapping
 CHECK_TYPE_A = config.get('ReferenceSheet', 'check_type_a', fallback='A-CHECK')
 CHECK_TYPE_C = config.get('ReferenceSheet', 'check_type_c', fallback='C-CHECK')
 CHECK_TYPE_Y = config.get('ReferenceSheet', 'check_type_y', fallback='Y-CHECK')
@@ -85,10 +86,10 @@ if config.has_section('ToolControlColumns'):
     TOTAL_QTY_COLUMN = config['ToolControlColumns']['total_qty']
     ALT_QTY_COLUMN = config['ToolControlColumns']['alt_qty']
 
-# SEQ Mappings section - determines how each SEQ prefix should be processed
+# SEQ Mappings section
 SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings')}
 
-# SEQ ID Mappings section - determines how to extract ID from title
+# SEQ ID Mappings section
 SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
 
 # Thresholds section
@@ -108,12 +109,6 @@ def get_check_type_from_wp_type(wp_type):
 
     Returns:
         str: Check type (e.g., "A-CHECK", "C-CHECK", "Y-CHECK")
-
-    Examples:
-        >>> get_check_type_from_wp_type("A06")
-        'A-CHECK'
-        >>> get_check_type_from_wp_type("C12")
-        'C-CHECK'
     """
     if not wp_type:
         return None
@@ -131,7 +126,11 @@ def get_check_type_from_wp_type(wp_type):
 
 
 def print_config():
-    """Display the configuration (for debugging purposes)"""
+    """
+    Display the configuration (for debugging purposes).
+
+    Note: This uses print() directly since it's meant for console debugging/verification.
+    """
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Reference file: {REFERENCE_FILE}")

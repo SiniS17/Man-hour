@@ -1,14 +1,20 @@
 """
 Test Runner Module
 Unified test orchestration with comprehensive logging
+REFACTORED: Now uses centralized logging system
 """
 
 import os
+import logging
 from datetime import datetime
+from utils.logger import get_logger, info, error, warning
 from .test_config import test_config
 from .test_coefficients import test_coefficients
 from .test_tool_control import test_tool_control
 from .test_data_quality import test_data_quality
+
+# Get module-specific logger
+logger = get_logger(module_name="test_runner")
 
 
 class TestResult:
@@ -57,40 +63,48 @@ def run_all_tests(save_log=True, verbose=True):
     Returns:
         dict: Dictionary with test results
     """
-    print("=" * 80)
-    print("RUNNING COMPREHENSIVE TEST SUITE")
-    print("=" * 80)
-    print()
+    # Temporarily disable logging during tests to reduce noise
+    if not verbose:
+        logging.disable(logging.CRITICAL)
+
+    info("="*80)
+    info("RUNNING COMPREHENSIVE TEST SUITE")
+    info("="*80)
+    info("")
 
     results = []
 
     # Test 1: Configuration
-    print("Test 1: Configuration Validation")
-    print("-" * 80)
+    info("Test 1: Configuration Validation")
+    info("-"*80)
     result = run_test_with_capture(test_config, "Configuration", verbose)
     results.append(result)
-    print()
+    info("")
 
     # Test 2: Coefficients
-    print("Test 2: Coefficient Functionality")
-    print("-" * 80)
+    info("Test 2: Coefficient Functionality")
+    info("-"*80)
     result = run_test_with_capture(test_coefficients, "Coefficients", verbose)
     results.append(result)
-    print()
+    info("")
 
     # Test 3: Tool Control
-    print("Test 3: Tool Control Functionality")
-    print("-" * 80)
+    info("Test 3: Tool Control Functionality")
+    info("-"*80)
     result = run_test_with_capture(test_tool_control, "Tool Control", verbose)
     results.append(result)
-    print()
+    info("")
 
     # Test 4: Data Quality
-    print("Test 4: Data Quality Checks")
-    print("-" * 80)
+    info("Test 4: Data Quality Checks")
+    info("-"*80)
     result = run_test_with_capture(test_data_quality, "Data Quality", verbose)
     results.append(result)
-    print()
+    info("")
+
+    # Re-enable logging
+    if not verbose:
+        logging.disable(logging.NOTSET)
 
     # Print summary
     print_test_summary(results)
@@ -123,10 +137,10 @@ def run_test_with_capture(test_func, test_name, verbose=True):
     result = TestResult(test_name)
 
     try:
-        # Run the test and capture return value
+        # Run the test
         test_output = test_func()
 
-        # If test returns a dictionary with status
+        # Process return value
         if isinstance(test_output, dict):
             if test_output.get('passed', False):
                 result.mark_passed()
@@ -134,23 +148,22 @@ def run_test_with_capture(test_func, test_name, verbose=True):
                 result.mark_failed(test_output.get('error', 'Test failed'))
 
             # Capture warnings
-            for warning in test_output.get('warnings', []):
-                result.add_warning(warning)
+            for warn in test_output.get('warnings', []):
+                result.add_warning(warn)
 
             # Capture output
-            for output in test_output.get('output', []):
-                result.add_output(output)
+            for out in test_output.get('output', []):
+                result.add_output(out)
         else:
-            # If test just runs without errors, mark as passed
             result.mark_passed()
 
         if verbose:
-            print(f"✓ {test_name} test completed successfully")
+            info(f"✓ {test_name} test completed successfully")
 
     except Exception as e:
         result.mark_failed(str(e))
         if verbose:
-            print(f"✗ {test_name} test failed: {e}")
+            error(f"✗ {test_name} test failed: {e}")
 
     return result
 
@@ -162,10 +175,11 @@ def print_test_summary(results):
     Args:
         results (list): List of TestResult objects
     """
-    print("=" * 80)
+    print("")
+    print("="*80)
     print("TEST SUMMARY")
-    print("=" * 80)
-    print()
+    print("="*80)
+    print("")
 
     for result in results:
         status_symbol = "✓" if result.passed else "✗"
@@ -173,15 +187,15 @@ def print_test_summary(results):
         print(f"{status_symbol} {result.test_name}: {status}")
 
         if result.errors:
-            for error in result.errors:
-                print(f"  ERROR: {error}")
+            for err in result.errors:
+                print(f"  ERROR: {err}")
 
         if result.warnings:
-            for warning in result.warnings:
-                print(f"  WARNING: {warning}")
+            for warn in result.warnings:
+                print(f"  WARNING: {warn}")
 
-    print()
-    print("-" * 80)
+    print("")
+    print("-"*80)
 
     total = len(results)
     passed = sum(1 for r in results if r.passed)
@@ -192,13 +206,13 @@ def print_test_summary(results):
     print(f"Failed: {failed}")
 
     if failed == 0:
-        print()
+        print("")
         print("✓ ALL TESTS PASSED!")
     else:
-        print()
+        print("")
         print("✗ SOME TESTS FAILED - Please review errors above")
 
-    print("=" * 80)
+    print("="*80)
 
 
 def save_test_log(results):
@@ -217,18 +231,18 @@ def save_test_log(results):
     log_file_path = os.path.join(log_folder, f"test_results_{timestamp}.txt")
 
     with open(log_file_path, "w", encoding="utf-8") as f:
-        f.write("=" * 80 + "\n")
+        f.write("="*80 + "\n")
         f.write("COMPREHENSIVE TEST RESULTS\n")
-        f.write("=" * 80 + "\n")
+        f.write("="*80 + "\n")
         f.write(f"Test Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("\n")
 
         # Write individual test results
         for result in results:
-            f.write("-" * 80 + "\n")
+            f.write("-"*80 + "\n")
             f.write(f"TEST: {result.test_name}\n")
             f.write(f"STATUS: {result.get_status()}\n")
-            f.write("-" * 80 + "\n")
+            f.write("-"*80 + "\n")
 
             if result.output:
                 f.write("\nOutput:\n")
@@ -237,20 +251,20 @@ def save_test_log(results):
 
             if result.errors:
                 f.write("\nErrors:\n")
-                for error in result.errors:
-                    f.write(f"  ✗ {error}\n")
+                for err in result.errors:
+                    f.write(f"  ✗ {err}\n")
 
             if result.warnings:
                 f.write("\nWarnings:\n")
-                for warning in result.warnings:
-                    f.write(f"  ⚠ {warning}\n")
+                for warn in result.warnings:
+                    f.write(f"  ⚠ {warn}\n")
 
             f.write("\n")
 
         # Write summary
-        f.write("=" * 80 + "\n")
+        f.write("="*80 + "\n")
         f.write("SUMMARY\n")
-        f.write("=" * 80 + "\n")
+        f.write("="*80 + "\n")
 
         total = len(results)
         passed = sum(1 for r in results if r.passed)
@@ -265,9 +279,9 @@ def save_test_log(results):
         else:
             f.write("\n✗ SOME TESTS FAILED\n")
 
-        f.write("=" * 80 + "\n")
+        f.write("="*80 + "\n")
 
-    print(f"\nTest log saved to: {log_file_path}")
+    logger.info(f"Test log saved to: {log_file_path}")
 
 
 def main():
