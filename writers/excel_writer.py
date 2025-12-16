@@ -1,6 +1,7 @@
 """
 Excel Writer Module
 Main orchestration for Excel output generation
+FIXED: Removed debug_logger import and debug.txt generation
 """
 
 import os
@@ -12,7 +13,6 @@ from .sheet_total_mhrs import create_total_mhrs_sheet
 from .sheet_high_mhrs import create_high_mhrs_sheet
 from .sheet_new_tasks import create_new_task_ids_sheet
 from .sheet_tool_control import create_tool_control_sheet
-from .debug_logger import save_debug_log
 
 
 def load_input_files():
@@ -30,12 +30,14 @@ def load_input_files():
 
 def save_output_file(input_file_name, report_data):
     """
-    Save the report data to Excel file and debug log.
+    Save the report data to Excel file.
 
-    This is the main orchestration function that:
+    NOTE: Debug logging is now handled by the centralized logging system
+    in the data_processor module. No separate debug.txt file is created.
+
+    This function now only:
     1. Creates output folder structure
     2. Generates Excel file with multiple sheets
-    3. Saves debug log
 
     Args:
         input_file_name (str): Name of the input file
@@ -75,11 +77,9 @@ def save_output_file(input_file_name, report_data):
         traceback.print_exc()
         raise
 
-    # Save debug log to LOG folder in root directory
-    try:
-        save_debug_log(base_filename, timestamp, report_data)
-    except Exception as e:
-        print(f"Warning: Could not save debug log: {e}")
+    # NOTE: Debug logging is now part of the centralized logging system
+    # All debug information is written to LOG/{filename}/processing_{timestamp}.log
+    # No separate debug.txt file is created
 
 
 def create_output_folder_structure(base_filename):

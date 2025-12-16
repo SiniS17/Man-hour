@@ -2,6 +2,7 @@
 Data Processor Module
 Core processing logic for workpack data analysis
 REFACTORED: Now uses centralized logging system
+FIXED: Removed debug.txt generation, fixed special code display, fixed adjusted hours calculation
 """
 
 import pandas as pd
@@ -206,18 +207,27 @@ def process_data(input_file_path, reference_data):
     # Calculate total additional hours (bonus + type coefficient)
     total_additional_hours = bonus_hours + type_coefficient_hours
 
-    logger.info("TOTALS BEFORE APPLYING BONUS")
+    logger.info("TOTALS CALCULATION")
     logger.info("-"*80)
-    logger.info(f"Bonus hours: {bonus_hours:.2f}")
-    logger.info(f"Type coefficient hours: {type_coefficient_hours:.2f}")
+    logger.info(f"Base hours (from rows): {total_base_mhrs:.2f}")
+    logger.info(f"Type coefficient additional: {type_coefficient_hours:.2f}")
+    logger.info(f"Bonus hours (workpack-level): {bonus_hours:.2f}")
     logger.info(f"Total additional: {total_additional_hours:.2f}")
     logger.info("")
 
-    # Apply bonus hours to dataframe
-    df_processed = apply_bonus_hours(df_processed, ac_type, wp_type, bonus_lookup)
+    # NOTE: Bonus hours are NOT added to individual rows
+    # They are added ONCE to the final total
+    # This prevents multiplying bonus by the number of rows
 
-    # Calculate total man-hours AFTER all adjustments
-    total_mhrs = df_processed['Adjusted Hours'].sum()
+    # Calculate total man-hours: Base + Type Coefficient Effect + Bonus (once)
+    total_mhrs = df_processed['Adjusted Hours'].sum() + bonus_hours
+
+    logger.info("FINAL CALCULATION")
+    logger.info("-"*80)
+    logger.info(f"Sum of adjusted rows: {df_processed['Adjusted Hours'].sum():.2f}")
+    logger.info(f"Plus workpack bonus: +{bonus_hours:.2f}")
+    logger.info(f"Final total: {total_mhrs:.2f}")
+    logger.info("")
 
     logger.info("FINAL TOTALS")
     logger.info("-"*80)
@@ -263,7 +273,7 @@ def process_data(input_file_path, reference_data):
     logger.info("="*80)
     logger.info("")
 
-    # Write debug sample to log
+    # Write debug sample to log (NOT to debug.txt - using centralized logger)
     write_debug_sample_to_log(logger, random_sample, enable_special_code_processing)
 
     # Close the file-specific logger
@@ -329,7 +339,7 @@ def identify_new_task_ids(df_processed, reference_task_ids, reference_eo_ids):
 
 def write_debug_sample_to_log(logger, debug_df, enable_special_code):
     """
-    Write the debug sample section to the log file.
+    Write the debug sample section to the log file (NOT to separate debug.txt).
 
     Args:
         logger: Logger instance
@@ -349,12 +359,14 @@ def write_debug_sample_to_log(logger, debug_df, enable_special_code):
     logger.info("-"*120)
 
     if enable_special_code:
+        # Use the SPECIAL_CODE_COLUMN from config to get the actual special code value
         logger.info(f"| {SEQ_NO_COLUMN:<8} | Special Code | Task ID          | Type Coeff | Base Mhrs | Adjusted Mhrs |")
         logger.info("-"*120)
 
         for idx, row in debug_df.iterrows():
             seq_no = str(row[SEQ_NO_COLUMN])
-            special_code = str(row.get('Special code', 'N/A')) if pd.notna(row.get('Special code')) else "N/A"
+            # FIXED: Get special code from SPECIAL_CODE_COLUMN, not hardcoded 'Special code'
+            special_code = str(row.get(SPECIAL_CODE_COLUMN, 'N/A')) if pd.notna(row.get(SPECIAL_CODE_COLUMN)) else "N/A"
             special_code = special_code[:12]
             task_id = str(row['Task ID'])[:16]
             type_coefficient = row.get('Type Coefficient', 1.0)

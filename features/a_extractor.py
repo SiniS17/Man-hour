@@ -1,8 +1,7 @@
 """
-A Column Extractor Module
-Extracts ac_name and wp_type from column A, then looks up ac_type
-Also handles bonus hours lookup from all sheets in the bonus hours file
-REFACTORED: Now uses centralized logging system
+Fixed A Extractor Module
+CRITICAL FIX: Bonus hours should NOT be added to every row
+Instead, they are tracked separately and only added to the final total
 """
 
 import pandas as pd
@@ -144,6 +143,7 @@ def extract_from_dataframe(df):
 def load_bonus_hours_lookup():
     """
     Load bonus hours from ALL sheets in the bonus hours file.
+    Filters by IsActive column if present (only includes TRUE values).
 
     Returns:
         dict: Nested dictionary {wp_type: {ac_type: total_bonus_hours}}
@@ -165,11 +165,16 @@ def load_bonus_hours_lookup():
         logger.debug(f"Column mapping: Aircraft='{AIRCRAFT_CODE_COLUMN}', Product='{PRODUCT_CODE_COLUMN}', Bonus1='{BONUS_1_COLUMN}', Bonus2='{BONUS_2_COLUMN}'")
 
         total_rows_processed = 0
+        total_rows_skipped_inactive = 0
 
         for sheet_name in excel_file.sheet_names:
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
 
             logger.debug(f"Processing sheet '{sheet_name}'...")
+
+            rows_before_filter = len(df)
+
+            rows_before_filter = len(df)
 
             # Check for required columns
             missing_cols = []
@@ -189,6 +194,18 @@ def load_bonus_hours_lookup():
                 logger.warning(f"Sheet '{sheet_name}' missing columns: {missing_cols}")
                 logger.debug(f"Available columns: {list(df.columns)}")
                 continue
+
+            # FILTER BY IsActive COLUMN if it exists
+            has_isactive = 'IsActive' in df.columns
+            if has_isactive:
+                logger.debug(f"Found 'IsActive' column in sheet '{sheet_name}' - filtering for TRUE values only")
+                df = df[df['IsActive'] == True].copy()
+                rows_after_filter = len(df)
+                rows_skipped = rows_before_filter - rows_after_filter
+                total_rows_skipped_inactive += rows_skipped
+                logger.debug(f"  Active rows: {rows_after_filter}, Skipped (inactive): {rows_skipped}")
+            else:
+                logger.debug(f"No 'IsActive' column in sheet '{sheet_name}' - processing all rows")
 
             # Process each row
             rows_in_sheet = 0
@@ -231,6 +248,8 @@ def load_bonus_hours_lookup():
         # Summary
         logger.info(f"✓ Successfully loaded bonus hours:")
         logger.info(f"  - Total rows processed: {total_rows_processed}")
+        if total_rows_skipped_inactive > 0:
+            logger.info(f"  - Rows skipped (inactive): {total_rows_skipped_inactive}")
         logger.info(f"  - Product codes found: {len(bonus_lookup)}")
         for wp_type in sorted(bonus_lookup.keys()):
             logger.debug(f"    • {wp_type}: {len(bonus_lookup[wp_type])} aircraft types")
@@ -248,6 +267,9 @@ def load_bonus_hours_lookup():
 def get_bonus_hours(ac_type, wp_type, bonus_lookup):
     """
     Look up bonus hours for given ac_type and wp_type.
+
+    IMPORTANT: This returns the TOTAL bonus for the entire workpack,
+    NOT a per-row bonus. It should be added to the final total ONCE.
 
     Args:
         ac_type: Aircraft type
@@ -276,12 +298,14 @@ def get_bonus_hours(ac_type, wp_type, bonus_lookup):
 
     bonus = bonus_lookup[wp_type][ac_type]
     logger.info(f"✓ Found bonus hours: {bonus:.2f} hours for ac_type='{ac_type}', wp_type='{wp_type}'")
+    logger.info(f"  NOTE: This is a WORKPACK-LEVEL bonus, added ONCE to the final total")
     return bonus
 
 
 def get_bonus_breakdown_by_source(ac_type, wp_type):
     """
     Get breakdown of bonus hours by source sheet.
+    Only includes active records (IsActive = TRUE if column exists).
 
     Args:
         ac_type: Aircraft type
@@ -305,6 +329,10 @@ def get_bonus_breakdown_by_source(ac_type, wp_type):
             # Check if required columns exist
             if AIRCRAFT_CODE_COLUMN not in df.columns or PRODUCT_CODE_COLUMN not in df.columns:
                 continue
+
+            # FILTER BY IsActive if column exists
+            if 'IsActive' in df.columns:
+                df = df[df['IsActive'] == True].copy()
 
             has_bonus_1 = BONUS_1_COLUMN in df.columns
             has_bonus_2 = BONUS_2_COLUMN in df.columns
@@ -343,7 +371,13 @@ def get_bonus_breakdown_by_source(ac_type, wp_type):
 
 def apply_bonus_hours(df, ac_type, wp_type, bonus_lookup):
     """
-    Apply bonus hours to the DataFrame based on ac_type and wp_type.
+    REMOVED: Do NOT add bonus to every row!
+
+    Bonus hours are WORKPACK-LEVEL additions, not row-level.
+    They should only be added to the final total ONCE.
+
+    This function now does NOTHING and is kept for backward compatibility.
+    The bonus is handled in the data_processor total calculation.
 
     Args:
         df: DataFrame with 'Adjusted Hours' column
@@ -352,18 +386,10 @@ def apply_bonus_hours(df, ac_type, wp_type, bonus_lookup):
         bonus_lookup: Dictionary from load_bonus_hours_lookup()
 
     Returns:
-        DataFrame: Updated DataFrame with bonus hours applied
+        DataFrame: UNCHANGED DataFrame (bonus NOT applied to rows)
     """
-    if 'Adjusted Hours' not in df.columns:
-        logger.warning("'Adjusted Hours' column not found, cannot apply bonus hours")
-        return df
+    logger.info("apply_bonus_hours() called - bonus is now handled at total calculation level")
+    logger.info("NOT adding bonus to individual rows (would multiply bonus by number of rows)")
 
-    bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
-
-    if bonus_hours > 0:
-        logger.info(f"Applying bonus hours: +{bonus_hours:.2f} hours for ac_type='{ac_type}', wp_type='{wp_type}'")
-        df['Adjusted Hours'] = df['Adjusted Hours'] + bonus_hours
-    else:
-        logger.info(f"No bonus hours found for ac_type='{ac_type}', wp_type='{wp_type}'")
-
+    # Return DataFrame unchanged
     return df
