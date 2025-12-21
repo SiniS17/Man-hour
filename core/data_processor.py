@@ -4,24 +4,39 @@ Core processing logic for workpack data analysis
 UPDATED: Removed type coefficient, added SEQ coefficient system
 """
 
-import pandas as pd
 import os
 from datetime import datetime
+
+import pandas as pd
+
+from core.config import (
+    ENABLE_SPECIAL_CODE,
+    ENABLE_TOOL_CONTROL,
+    HIGH_MHRS_HOURS,
+    PLANNED_MHRS_COLUMN,
+    RANDOM_SAMPLE_SIZE,
+    REFERENCE_EO_PREFIX,
+    SEQ_NO_COLUMN,
+    SPECIAL_CODE_COLUMN,
+    TITLE_COLUMN,
+    get_seq_coefficient,
+)
+from core.data_loader import extract_workpack_dates, load_input_dataframe
+from core.id_extractor import extract_task_id
+from features.a_extractor import (
+    extract_from_dataframe,
+    get_bonus_breakdown_by_source,
+    get_bonus_hours,
+    load_bonus_hours_lookup,
+)
+from features.special_code import (
+    calculate_special_code_distribution,
+    calculate_special_code_per_day,
+    validate_special_code_column,
+)
+from utils.logger import WorkpackLogger, get_logger
 from utils.time_utils import convert_planned_mhrs, hours_to_hhmm
 from utils.validation import validate_required_columns
-from utils.logger import get_logger, WorkpackLogger
-from core.config import (SEQ_NO_COLUMN, TITLE_COLUMN, PLANNED_MHRS_COLUMN,
-                         HIGH_MHRS_HOURS, RANDOM_SAMPLE_SIZE,
-                         ENABLE_SPECIAL_CODE, SPECIAL_CODE_COLUMN,
-                         ENABLE_TOOL_CONTROL, REFERENCE_EO_PREFIX,
-                         get_seq_coefficient)
-from core.id_extractor import extract_task_id
-from core.data_loader import load_input_dataframe, extract_workpack_dates
-from features.special_code import (calculate_special_code_distribution,
-                                   calculate_special_code_per_day,
-                                   validate_special_code_column)
-from features.a_extractor import (extract_from_dataframe, load_bonus_hours_lookup,
-                                  get_bonus_hours, get_bonus_breakdown_by_source)
 
 # Import tool control module if enabled
 if ENABLE_TOOL_CONTROL:
@@ -48,7 +63,7 @@ def apply_seq_coefficients(df):
 
     logger.info("SEQ COEFFICIENT APPLICATION")
     logger.info("-"*80)
-    logger.info(f"Coefficient Distribution:")
+    logger.info("Coefficient Distribution:")
     coeff_counts = df['Coefficient'].value_counts().sort_index()
     for coeff, count in coeff_counts.items():
         logger.info(f"  {coeff:.2f}: {count} rows")
@@ -125,7 +140,7 @@ def process_data(input_file_path, reference_data):
     # Check tool availability if enabled
     tool_control_issues = pd.DataFrame()
     if ENABLE_TOOL_CONTROL:
-        from core.config import SEQ_MAPPINGS, SEQ_ID_MAPPINGS
+        from core.config import SEQ_ID_MAPPINGS, SEQ_MAPPINGS
         tool_control_issues = process_tool_control(input_file_path, SEQ_MAPPINGS, SEQ_ID_MAPPINGS)
 
     # Convert "Planned Mhrs" (in minutes) to base hours
@@ -169,7 +184,9 @@ def process_data(input_file_path, reference_data):
 
     # Get the bonus hours (workpack-level, added once)
     bonus_hours = get_bonus_hours(ac_type, wp_type, bonus_lookup)
-    bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type)
+
+    # Get detailed bonus breakdown by source (this will log all details)
+    bonus_breakdown = get_bonus_breakdown_by_source(ac_type, wp_type, file_logger=logger)
 
     # Calculate coefficient effect
     coefficient_effect = df_processed['Adjusted Hours'].sum() - df_processed['Base Hours'].sum()
