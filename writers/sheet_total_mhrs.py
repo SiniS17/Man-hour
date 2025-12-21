@@ -1,185 +1,106 @@
 """
-Total Man-Hours Sheet Module
-UPDATED: Restructured output, removed decimal hours, added Worker calculations
-FIXED: Show "< 8h/day" instead of "0 worker(s)" when less than 1 worker
+High Man-Hours Sheet Module
+FIXED: Removed coefficient columns, only shows Base Hours
+Also adds red highlighting for blank SEQ rows
 """
 
 import pandas as pd
-import math
+from openpyxl.styles import PatternFill
 from utils.time_utils import hours_to_hhmm
-from core.config import HOURS_PER_SHIFT
-
-
-def format_worker_per_day(avg_hours_per_day, hours_per_shift=8):
-    """
-    Format worker per day display.
-    If less than 1 full worker (< 8 hours/day), show "< 8h/day" instead of "0 worker(s)"
-
-    Args:
-        avg_hours_per_day: Average hours per day
-        hours_per_shift: Hours per shift (default 8)
-
-    Returns:
-        str: Formatted worker display
-    """
-    worker_count = avg_hours_per_day / hours_per_shift
-
-    if worker_count < 1:
-        return "< 8h/day"
-    else:
-        return f"{math.floor(worker_count)} worker(s)"
+from core.config import SEQ_NO_COLUMN, TITLE_COLUMN
 
 
 def create_total_mhrs_sheet(writer, report_data):
     """
-    Create TWO separate sheets:
-    1. Total Man-Hours Summary
-    2. Special Code Distribution
+    Create the High Man-Hours Tasks sheet.
+    FIXED: Only shows Base Hours (no coefficient or adjusted hours)
     """
-    create_man_hours_summary_sheet(writer, report_data)
+    high_mhrs_df = report_data['high_mhrs_tasks'].copy()
 
-    if report_data.get('enable_special_code'):
-        create_special_code_sheet(writer, report_data)
+    if len(high_mhrs_df) == 0:
+        df = pd.DataFrame([['No tasks found with planned man-hours exceeding the threshold']])
+        df.to_excel(writer, sheet_name='High Man-Hours Tasks', index=False, header=False)
+        return
+
+    # Add HH:MM formatted column (ONLY Base Hours)
+    high_mhrs_df['Base Mhrs'] = high_mhrs_df['Base Hours'].apply(hours_to_hhmm)
+
+    # Select and order columns (NO coefficient or adjusted hours)
+    columns_to_export = build_export_columns(high_mhrs_df)
+    export_df = high_mhrs_df[columns_to_export]
+
+    # Write to Excel
+    export_df.to_excel(writer, sheet_name='High Man-Hours Tasks', index=False)
+
+    # Get the worksheet
+    worksheet = writer.sheets['High Man-Hours Tasks']
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    # Auto-adjust column widths
+    adjust_column_widths(writer, 'High Man-Hours Tasks', export_df)
+
+    # Add red highlighting for blank SEQ rows
+    highlight_blank_seq_rows(worksheet, export_df)
 
 
-def create_man_hours_summary_sheet(writer, report_data):
+def build_export_columns(df):
+    """Build the list of columns to export (NO coefficients)."""
+    columns_to_export = []
+
+    if SEQ_NO_COLUMN in df.columns:
+        columns_to_export.append(SEQ_NO_COLUMN)
+
+    if TITLE_COLUMN in df.columns:
+        columns_to_export.append(TITLE_COLUMN)
+
+    if 'Task ID' in df.columns:
+        columns_to_export.append('Task ID')
+
+    # ONLY Base Hours (no coefficient, no adjusted hours)
+    columns_to_export.append('Base Mhrs')
+
+    return columns_to_export
+
+
+def highlight_blank_seq_rows(worksheet, df):
     """
-    Create the Total Man-Hours Summary sheet.
+    Add red highlighting to rows with blank SEQ values.
 
-    New Structure:
-    1. Project Information
-    2. Base Man-Hours (before any adjustments)
-    3. Bonus Hours (breakdown by source)
-    4. Total Man-Hours (Base + Coefficients + Bonus)
+    Args:
+        worksheet: openpyxl worksheet object
+        df: DataFrame that was written to the sheet
     """
-    data = []
+    red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
-    total_mhrs = report_data['total_mhrs']
-    total_base_mhrs = report_data.get('total_base_mhrs', total_mhrs)
-    coefficient_effect = report_data.get('coefficient_effect', 0.0)
-    bonus_hours = report_data.get('bonus_hours', 0.0)
+    # Find SEQ column index
+    seq_col_idx = None
+    for idx, col in enumerate(df.columns):
+        if col == SEQ_NO_COLUMN:
+            seq_col_idx = idx
+            break
 
-    workpack_days = report_data.get('workpack_days')
-    start_date = report_data.get('start_date')
-    end_date = report_data.get('end_date')
+    if seq_col_idx is None:
+        return  # SEQ column not found
 
-    ac_type = report_data.get('ac_type')
-    ac_name = report_data.get('ac_name')
-    wp_type = report_data.get('wp_type')
+    # Check each data row (starting from row 2, after header)
+    for row_idx, (_, row) in enumerate(df.iterrows(), start=2):
+        seq_value = row[SEQ_NO_COLUMN]
 
-    # === PROJECT INFORMATION ===
-    data.append(['PROJECT INFORMATION', ''])
-    data.append(['Workpack Period:',
-                 f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else 'N/A'])
-    data.append(['Workpack Duration:',
-                 f"{workpack_days} days" if workpack_days else 'N/A'])
-    data.append(['Aircraft Registration:', ac_name or 'N/A'])
-    data.append(['Aircraft Type:', ac_type or 'N/A'])
-    data.append(['Check Type (WP Type):', wp_type or 'N/A'])
-    data.append(['', ''])
-
-    # === BASE MAN-HOURS ===
-    data.append(['BASE MAN-HOURS', ''])
-    data.append(['(Before any coefficients or bonus)', ''])
-    data.append(['Base Man-Hours:', hours_to_hhmm(total_base_mhrs)])
-    data.append(['', ''])
-
-    # === BONUS HOURS ===
-    data.append(['BONUS HOURS', ''])
-    bonus_breakdown = report_data.get('bonus_breakdown', {})
-
-    if bonus_breakdown:
-        for source, hours in bonus_breakdown.items():
-            data.append([f"  • {source}", hours_to_hhmm(hours)])
-        data.append(['', ''])
-
-    data.append(['Total Bonus Hours:', hours_to_hhmm(bonus_hours)])
-    data.append(['', ''])
-
-    # === TOTAL MAN-HOURS ===
-    data.append(['TOTAL MAN-HOURS', ''])
-    data.append(['(Base + SEQ Coefficients + Bonus)', ''])
-    data.append(['Total Man-Hours:', hours_to_hhmm(total_mhrs)])
-
-    if workpack_days and workpack_days > 0:
-        avg_per_day = total_mhrs / workpack_days
-        data.append(['Average Man-Hours per Day:', hours_to_hhmm(avg_per_day)])
-
-        # FIXED: Use format_worker_per_day() instead of showing "0 worker(s)"
-        worker_display = format_worker_per_day(avg_per_day, HOURS_PER_SHIFT)
-        data.append(['Average Worker per Day:', worker_display])
-
-    # Create DataFrame and write
-    df = pd.DataFrame(data)
-    df.to_excel(writer, sheet_name='Total Man-Hours Summary', index=False, header=False)
-
-    # Format worksheet
-    worksheet = writer.sheets['Total Man-Hours Summary']
-    worksheet.column_dimensions['A'].width = 45
-    worksheet.column_dimensions['B'].width = 20
+        # Check if SEQ is blank/empty
+        if pd.isna(seq_value) or str(seq_value).strip() == '':
+            # Highlight entire row
+            for col_idx in range(1, len(df.columns) + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                cell.fill = red_fill
 
 
-def create_special_code_sheet(writer, report_data):
-    """
-    Create the Special Code Distribution sheet.
-    UPDATED: Removed decimal hours, added Worker(s)/Day calculation.
-    FIXED: Show "< 8h/day" instead of "0 worker(s)" when less than 1 worker.
-    """
-    data = []
+def adjust_column_widths(writer, sheet_name, df, max_width=50):
+    """Auto-adjust column widths."""
+    worksheet = writer.sheets[sheet_name]
 
-    total_hours = report_data['total_mhrs']
-    workpack_days = report_data.get('workpack_days')
-
-    # Header row
-    if workpack_days:
-        data.append(['Special Code', 'Hours', 'Avg Hours/Day', 'Worker(s)/Day', 'Distribution (%)'])
-    else:
-        data.append(['Special Code', 'Hours', 'Distribution (%)'])
-
-    if report_data['special_code_distribution']:
-        special_code_per_day = report_data.get('special_code_per_day', {})
-
-        # Add each special code row
-        for code, hours in report_data['special_code_distribution'].items():
-            code_str = str(code) if pd.notna(code) else "(No Code)"
-            percentage = (hours / total_hours * 100) if total_hours > 0 else 0
-            time_str = hours_to_hhmm(hours)
-
-            if workpack_days and code in special_code_per_day:
-                avg_per_day = special_code_per_day[code]
-                avg_per_day_str = hours_to_hhmm(avg_per_day)
-
-                # FIXED: Use format_worker_per_day() instead of showing "0 worker(s)"
-                worker_display = format_worker_per_day(avg_per_day, HOURS_PER_SHIFT)
-                data.append([code_str, time_str, avg_per_day_str, worker_display, f"{percentage:.1f}%"])
-            else:
-                data.append([code_str, time_str, f"{percentage:.1f}%"])
-
-    # Add Total row
-    if workpack_days:
-        avg_total_per_day = total_hours / workpack_days if workpack_days > 0 else 0
-        avg_total_str = hours_to_hhmm(avg_total_per_day)
-
-        # FIXED: Use format_worker_per_day() instead of showing "0 worker(s)"
-        worker_total_display = format_worker_per_day(avg_total_per_day, HOURS_PER_SHIFT)
-        data.append(['TOTAL', hours_to_hhmm(total_hours), avg_total_str, worker_total_display, '100.0%'])
-    else:
-        data.append(['TOTAL', hours_to_hhmm(total_hours), '100.0%'])
-
-    # Create DataFrame and write
-    df = pd.DataFrame(data)
-    df.to_excel(writer, sheet_name='Special Code Distribution', index=False, header=False)
-
-    # Format worksheet
-    worksheet = writer.sheets['Special Code Distribution']
-    worksheet.auto_filter.ref = f"A1:{chr(65 + len(data[0]) - 1)}{len(data)}"
-
-    # Adjust column widths
-    for idx in range(len(data[0])):
-        col_letter = chr(65 + idx)
-        if idx == 0:  # Special Code
-            worksheet.column_dimensions[col_letter].width = 25
-        elif idx == 3:  # Worker(s)/Day
-            worksheet.column_dimensions[col_letter].width = 15
-        else:
-            worksheet.column_dimensions[col_letter].width = 20
+    for idx, col in enumerate(df.columns):
+        max_length = max(
+            df[col].astype(str).apply(len).max(),
+            len(str(col))
+        )
+        worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, max_width)

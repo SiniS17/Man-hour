@@ -1,23 +1,20 @@
 """
 Tool Control Sheet Module
-Generates the Tool Control sheet showing tools/spares with zero availability
+FIXED: Added red highlighting for blank SEQ rows
 """
 
 import pandas as pd
+from openpyxl.styles import PatternFill
 
 
 def create_tool_control_sheet(writer, report_data):
     """
     Create the Tool Control sheet showing tools/spares with zero availability.
-
-    Args:
-        writer: pd.ExcelWriter object
-        report_data (dict): Dictionary containing processed data
+    FIXED: Added red highlighting for blank SEQ rows.
     """
     tool_issues_df = report_data.get('tool_control_issues', pd.DataFrame())
 
     if len(tool_issues_df) == 0:
-        # Create empty sheet with message
         df = pd.DataFrame([['All tools and spares have adequate availability (quantity > 0)']])
         df.to_excel(writer, sheet_name='Tool Control', index=False, header=False)
         return
@@ -27,27 +24,51 @@ def create_tool_control_sheet(writer, report_data):
 
     # Get the worksheet
     worksheet = writer.sheets['Tool Control']
-
-    # Add autofilter to headers
     worksheet.auto_filter.ref = worksheet.dimensions
 
     # Auto-adjust column widths
     adjust_column_widths(writer, 'Tool Control', tool_issues_df)
 
+    # Add red highlighting for blank SEQ rows
+    highlight_blank_seq_rows(worksheet, tool_issues_df)
 
-def adjust_column_widths(writer, sheet_name, df):
+
+def highlight_blank_seq_rows(worksheet, df):
     """
-    Auto-adjust column widths for better readability.
-    Different columns have different max widths based on content type.
+    Add red highlighting to rows with blank SEQ values.
 
     Args:
-        writer: pd.ExcelWriter object
-        sheet_name (str): Name of the sheet
-        df (pd.DataFrame): DataFrame written to sheet
+        worksheet: openpyxl worksheet object
+        df: DataFrame that was written to the sheet
     """
+    red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+
+    # Find SEQ column index
+    seq_col_idx = None
+    for idx, col in enumerate(df.columns):
+        if col == 'SEQ':
+            seq_col_idx = idx
+            break
+
+    if seq_col_idx is None:
+        return  # SEQ column not found
+
+    # Check each data row (starting from row 2, after header)
+    for row_idx, (_, row) in enumerate(df.iterrows(), start=2):
+        seq_value = row['SEQ']
+
+        # Check if SEQ is blank/empty
+        if pd.isna(seq_value) or str(seq_value).strip() == '':
+            # Highlight entire row
+            for col_idx in range(1, len(df.columns) + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                cell.fill = red_fill
+
+
+def adjust_column_widths(writer, sheet_name, df):
+    """Auto-adjust column widths for better readability."""
     worksheet = writer.sheets[sheet_name]
 
-    # Define max widths for different column types
     column_max_widths = {
         'Tool/Spare Name': 70,
         'Part Number': 25,
@@ -61,24 +82,12 @@ def adjust_column_widths(writer, sheet_name, df):
             df[col].astype(str).apply(len).max(),
             len(str(col))
         )
-
-        # Get appropriate max width for this column
         max_width = column_max_widths.get(col, 20)
-
-        # Set width
         worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, max_width)
 
 
 def get_tool_control_summary(tool_issues_df):
-    """
-    Generate a summary of tool control issues.
-
-    Args:
-        tool_issues_df (pd.DataFrame): DataFrame with tool control issues
-
-    Returns:
-        dict: Summary statistics
-    """
+    """Generate a summary of tool control issues."""
     if len(tool_issues_df) == 0:
         return {
             'total_issues': 0,
@@ -98,31 +107,17 @@ def get_tool_control_summary(tool_issues_df):
 
 
 def format_tool_control_message():
-    """
-    Format the message for when no tool control issues are found.
-
-    Returns:
-        str: Formatted message
-    """
+    """Format the message for when no tool control issues are found."""
     return 'All tools and spares have adequate availability (quantity > 0)'
 
 
 def count_tool_issues_by_type(tool_issues_df):
-    """
-    Count tool issues by type (Tool vs Spare).
-
-    Args:
-        tool_issues_df (pd.DataFrame): DataFrame with tool control issues
-
-    Returns:
-        dict: Dictionary with counts by type
-    """
+    """Count tool issues by type (Tool vs Spare)."""
     if len(tool_issues_df) == 0:
         return {'Tool': 0, 'Spare': 0, 'Unknown': 0}
 
     type_counts = tool_issues_df['Type'].value_counts().to_dict()
 
-    # Ensure all types are present
     result = {
         'Tool': type_counts.get('Tool', 0),
         'Spare': type_counts.get('Spare', 0),

@@ -1,23 +1,20 @@
 """
 New Task IDs Sheet Module
-Generates the New Task IDs sheet
+FIXED: Added red highlighting for blank SEQ rows
 """
 
 import pandas as pd
+from openpyxl.styles import PatternFill
 
 
 def create_new_task_ids_sheet(writer, report_data):
     """
     Create the New Task IDs sheet with SEQ numbers.
-
-    Args:
-        writer: pd.ExcelWriter object
-        report_data (dict): Dictionary containing processed data
+    FIXED: Added red highlighting for blank SEQ rows.
     """
     new_task_ids_df = report_data['new_task_ids_with_seq']
 
     if len(new_task_ids_df) == 0:
-        # Create empty sheet with message
         df = pd.DataFrame([['No new task IDs found - all task IDs match reference']])
         df.to_excel(writer, sheet_name='New Task IDs', index=False, header=False)
         return
@@ -38,41 +35,51 @@ def create_new_task_ids_sheet(writer, report_data):
 
     # Get the worksheet
     worksheet = writer.sheets['New Task IDs']
-
-    # Add autofilter to headers
     worksheet.auto_filter.ref = worksheet.dimensions
 
     # Auto-adjust column widths
     adjust_column_widths(writer, 'New Task IDs', filtered_df)
 
+    # Add red highlighting for blank SEQ rows
+    highlight_blank_seq_rows(worksheet, filtered_df)
 
-def filter_valid_task_ids(df):
+
+def highlight_blank_seq_rows(worksheet, df):
     """
-    Filter out None and 'nan' values from task IDs.
+    Add red highlighting to rows with blank SEQ values.
 
     Args:
-        df (pd.DataFrame): DataFrame with task IDs
-
-    Returns:
-        pd.DataFrame: Filtered DataFrame
+        worksheet: openpyxl worksheet object
+        df: DataFrame that was written to the sheet
     """
+    red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+
+    # SEQ is the first column (index 0)
+    seq_col_idx = 0
+
+    # Check each data row (starting from row 2, after header)
+    for row_idx, (_, row) in enumerate(df.iterrows(), start=2):
+        seq_value = row['SEQ']
+
+        # Check if SEQ is blank/empty
+        if pd.isna(seq_value) or str(seq_value).strip() == '':
+            # Highlight entire row
+            for col_idx in range(1, len(df.columns) + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                cell.fill = red_fill
+
+
+def filter_valid_task_ids(df):
+    """Filter out None and 'nan' values from task IDs."""
     filtered_df = df[
         df['Task ID'].notna() &
         (df['Task ID'].astype(str) != 'nan')
-        ].copy()
-
+    ].copy()
     return filtered_df
 
 
 def adjust_column_widths(writer, sheet_name, df):
-    """
-    Auto-adjust column widths for better readability.
-
-    Args:
-        writer: pd.ExcelWriter object
-        sheet_name (str): Name of the sheet
-        df (pd.DataFrame): DataFrame written to sheet
-    """
+    """Auto-adjust column widths for better readability."""
     worksheet = writer.sheets[sheet_name]
 
     for idx, col in enumerate(df.columns):
@@ -84,29 +91,13 @@ def adjust_column_widths(writer, sheet_name, df):
 
 
 def count_new_task_ids(new_task_ids_df):
-    """
-    Count the number of valid new task IDs.
-
-    Args:
-        new_task_ids_df (pd.DataFrame): DataFrame with new task IDs
-
-    Returns:
-        int: Count of valid new task IDs
-    """
+    """Count the number of valid new task IDs."""
     filtered_df = filter_valid_task_ids(new_task_ids_df)
     return len(filtered_df)
 
 
 def get_new_task_ids_summary(new_task_ids_df):
-    """
-    Generate a summary of new task IDs.
-
-    Args:
-        new_task_ids_df (pd.DataFrame): DataFrame with new task IDs
-
-    Returns:
-        dict: Summary statistics
-    """
+    """Generate a summary of new task IDs."""
     filtered_df = filter_valid_task_ids(new_task_ids_df)
 
     if len(filtered_df) == 0:
@@ -117,5 +108,5 @@ def get_new_task_ids_summary(new_task_ids_df):
 
     return {
         'total_new_ids': len(filtered_df),
-        'unique_seqs': filtered_df.iloc[:, 0].nunique()  # First column is SEQ
+        'unique_seqs': filtered_df.iloc[:, 0].nunique()
     }

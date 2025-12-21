@@ -1,7 +1,7 @@
 """
 Data Processor Module
 Core processing logic for workpack data analysis
-UPDATED: Removed type coefficient, added SEQ coefficient system
+UPDATED: High MHR detection now uses Base Hours (before coefficients)
 """
 
 import os
@@ -172,6 +172,16 @@ def process_data(input_file_path, reference_data):
     # Calculate total base hours (BEFORE coefficients)
     total_base_mhrs = df_processed['Base Hours'].sum()
 
+    # FIXED: Identify high man-hours tasks BEFORE applying coefficients
+    # This ensures we check Base Hours, not Adjusted Hours
+    high_mhrs_tasks = df_processed[df_processed['Base Hours'] > HIGH_MHRS_HOURS].copy()
+
+    logger.info("HIGH MAN-HOURS TASKS DETECTION")
+    logger.info("-"*80)
+    logger.info(f"Threshold: {HIGH_MHRS_HOURS} hours")
+    logger.info(f"Tasks exceeding threshold: {len(high_mhrs_tasks)}")
+    logger.info("")
+
     # Apply SEQ-based coefficients
     df_processed = apply_seq_coefficients(df_processed)
 
@@ -203,9 +213,6 @@ def process_data(input_file_path, reference_data):
     logger.info(f"Bonus hours: +{bonus_hours:.2f}")
     logger.info(f"Final total: {total_mhrs:.2f}")
     logger.info("")
-
-    # Identify high man-hours tasks
-    high_mhrs_tasks = df_processed[df_processed['Adjusted Hours'] > HIGH_MHRS_HOURS]
 
     # Check for new task IDs
     new_task_ids_with_seq = identify_new_task_ids(
