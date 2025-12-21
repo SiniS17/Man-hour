@@ -1,6 +1,7 @@
 """
 Configuration Module
 Loads and manages all configuration settings from settings.ini
+UPDATED: Removed type coefficient, added SEQ coefficient system
 """
 
 import configparser
@@ -37,11 +38,25 @@ REFERENCE_EO_ID_COLUMN = config['ReferenceSheet']['eo_id_column']
 # EO prefix for identification
 REFERENCE_EO_PREFIX = config['ReferenceSheet']['eo_prefix']
 
+# Bonus hours configuration
+BONUS_HOURS_FILE = config.get('ReferenceSheet', 'bonus_hours_file', fallback='vB20WHourNorm.xlsx')
+AIRCRAFT_CODE_COLUMN = config.get('ReferenceSheet', 'aircraft_code_column', fallback='Aircraft code')
+PRODUCT_CODE_COLUMN = config.get('ReferenceSheet', 'product_code_column', fallback='ProductCode')
+BONUS_1_COLUMN = config.get('ReferenceSheet', 'bonus_1', fallback='Hours')
+BONUS_2_COLUMN = config.get('ReferenceSheet', 'bonus_2', fallback='Hours2')
+BONUS_ISACTIVE_COLUMN = config.get('ReferenceSheet', 'bonus_isactive_column', fallback='IsActive')
+
+# Aircraft type lookup configuration
+AC_TYPE_FILE = config.get('ReferenceSheet', 'ac_type_file', fallback='Regis.xlsx')
+AC_TYPE_REGISTRATION_COLUMN = config.get('ReferenceSheet', 'ac_type_registration_column', fallback='Regis')
+AC_TYPE_TYPE_COLUMN = config.get('ReferenceSheet', 'ac_type_type_column', fallback='Type')
+
 # UploadedSheet section
 SEQ_NO_COLUMN = config['UploadedSheet']['seq_no']
 TITLE_COLUMN = config['UploadedSheet']['title']
 PLANNED_MHRS_COLUMN = config['UploadedSheet']['planned_mhrs']
 SPECIAL_CODE_COLUMN = config['UploadedSheet']['special_code']
+A_COLUMN = config.get('UploadedSheet', 'a_column', fallback='A')
 
 # Tool Control Columns section
 TOOL_NAME_COLUMN = None
@@ -57,13 +72,13 @@ if config.has_section('ToolControlColumns'):
     TOTAL_QTY_COLUMN = config['ToolControlColumns']['total_qty']
     ALT_QTY_COLUMN = config['ToolControlColumns']['alt_qty']
 
-# SEQ Mappings section - determines how each SEQ prefix should be processed
+# SEQ Mappings section
 SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings')}
 
-# SEQ ID Mappings section - determines how to extract ID from title
+# SEQ ID Mappings section
 SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
 
-# SEQ Coefficients section - man-hour multipliers for each SEQ prefix
+# SEQ Coefficients section
 SEQ_COEFFICIENTS = {}
 DEFAULT_COEFFICIENT = 1.0
 
@@ -77,6 +92,10 @@ if config.has_section('SEQ_Coefficients'):
 # Thresholds section
 HIGH_MHRS_HOURS = config.getint('Thresholds', 'high_mhrs_hours')
 RANDOM_SAMPLE_SIZE = config.getint('Thresholds', 'random_sample_size')
+HOURS_PER_SHIFT = config.getint('Thresholds', 'hours_per_shift', fallback=8)
+
+# Output section
+SHOW_BONUS_HOURS_BREAKDOWN = config.getboolean('Output', 'show_bonus_hours_breakdown', fallback=True)
 
 
 def get_seq_coefficient(seq_no):
@@ -87,22 +106,22 @@ def get_seq_coefficient(seq_no):
         seq_no: SEQ identifier (e.g., "2.1", "3.5", "4.2")
 
     Returns:
-        float: Coefficient to multiply man-hours by
+        float: Coefficient to apply (e.g., 2.0, 1.0)
     """
-    # Extract the major version (e.g., "2" from "2.1")
-    seq_prefix = str(seq_no).split('.')[0]
+    if pd.isna(seq_no):
+        return DEFAULT_COEFFICIENT
 
-    # Look for the coefficient in the config
+    seq_str = str(seq_no)
+    seq_prefix = seq_str.split('.')[0]
     mapping_key = f"SEQ_{seq_prefix}.X"
 
-    if mapping_key in SEQ_COEFFICIENTS:
-        return SEQ_COEFFICIENTS[mapping_key]
-
-    return DEFAULT_COEFFICIENT
+    return SEQ_COEFFICIENTS.get(mapping_key, DEFAULT_COEFFICIENT)
 
 
 def print_config():
-    """Display the configuration (for debugging purposes)"""
+    """
+    Display the configuration (for debugging purposes).
+    """
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Reference file: {REFERENCE_FILE}")
@@ -112,10 +131,20 @@ def print_config():
     print(f"Reference EO Sheet Name: {REFERENCE_EO_SHEET_NAME}")
     print(f"Reference EO ID Column: {REFERENCE_EO_ID_COLUMN}")
     print(f"EO Prefix: {REFERENCE_EO_PREFIX}")
+    print(f"Bonus Hours File: {BONUS_HOURS_FILE}")
+    print(f"Aircraft Code Column: {AIRCRAFT_CODE_COLUMN}")
+    print(f"Product Code Column: {PRODUCT_CODE_COLUMN}")
+    print(f"Bonus Column 1: {BONUS_1_COLUMN}")
+    print(f"Bonus Column 2: {BONUS_2_COLUMN}")
+    print(f"Bonus IsActive Column: {BONUS_ISACTIVE_COLUMN}")
+    print(f"Aircraft Type File: {AC_TYPE_FILE}")
+    print(f"Aircraft Registration Column: {AC_TYPE_REGISTRATION_COLUMN}")
+    print(f"Aircraft Type Column: {AC_TYPE_TYPE_COLUMN}")
     print(f"Seq. No. Column: {SEQ_NO_COLUMN}")
     print(f"Title Column: {TITLE_COLUMN}")
     print(f"Planned Mhrs Column: {PLANNED_MHRS_COLUMN}")
     print(f"Special Code Column: {SPECIAL_CODE_COLUMN}")
+    print(f"A Column: {A_COLUMN}")
     print(f"Enable Special Code: {ENABLE_SPECIAL_CODE}")
     print(f"Enable Tool Control: {ENABLE_TOOL_CONTROL}")
     if ENABLE_TOOL_CONTROL:
@@ -126,7 +155,13 @@ def print_config():
         print(f"Alt Qty Column: {ALT_QTY_COLUMN}")
     print(f"High Mhrs Threshold: {HIGH_MHRS_HOURS}")
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
+    print(f"Hours per Shift: {HOURS_PER_SHIFT}")
+    print(f"Show Bonus Hours Breakdown: {SHOW_BONUS_HOURS_BREAKDOWN}")
     print(f"SEQ Mappings: {SEQ_MAPPINGS}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
     print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")
     print(f"Default Coefficient: {DEFAULT_COEFFICIENT}")
+
+
+# Import pandas for isna check
+import pandas as pd
