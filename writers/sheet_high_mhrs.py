@@ -19,9 +19,8 @@ def create_high_mhrs_sheet(writer, report_data):
         df.to_excel(writer, sheet_name='High Man-Hours Tasks', index=False, header=False)
         return
 
-    # Add HH:MM formatted columns (remove decimal columns)
+    # Add HH:MM formatted column (Base Hours only)
     high_mhrs_df['Base Mhrs'] = high_mhrs_df['Base Hours'].apply(hours_to_hhmm)
-    high_mhrs_df['Adjusted Mhrs'] = high_mhrs_df['Adjusted Hours'].apply(hours_to_hhmm)
 
     # Select and order columns
     columns_to_export = build_export_columns(high_mhrs_df)
@@ -51,8 +50,8 @@ def build_export_columns(df):
     if 'Task ID' in df.columns:
         columns_to_export.append('Task ID')
 
-    # Add coefficient and hour columns (HH:MM only, no decimals)
-    columns_to_export.extend(['Coefficient', 'Base Mhrs', 'Adjusted Mhrs'])
+    # Add Base Hours column only (HH:MM format)
+    columns_to_export.append('Base Mhrs')
 
     return columns_to_export
 
