@@ -98,10 +98,17 @@ def extract_from_dataframe(df):
     return ac_type, wp_type, ac_name
 
 
+"""
+Fix for features/a_extractor.py - load_bonus_hours_lookup()
+Bug: Bonus hours from multiple sheets are overwriting instead of accumulating
+Solution: Add bonus hours instead of overwriting them
+"""
+
 def load_bonus_hours_lookup():
     """
     Load bonus hours from ALL sheets in the bonus hours file.
     ONLY includes rows where IsActive = TRUE (or if IsActive column doesn't exist).
+    ACCUMULATES bonus hours from multiple sheets for the same ac_type/wp_type combination.
     """
     bonus_file_path = os.path.join(REFERENCE_FOLDER, BONUS_HOURS_FILE)
 
@@ -181,11 +188,16 @@ def load_bonus_hours_lookup():
                     except (ValueError, TypeError):
                         pass
 
-                # Store
+                # FIXED: ACCUMULATE instead of OVERWRITE
                 if wp_type not in bonus_lookup:
                     bonus_lookup[wp_type] = {}
 
-                bonus_lookup[wp_type][ac_type] = total_bonus
+                if ac_type not in bonus_lookup[wp_type]:
+                    bonus_lookup[wp_type][ac_type] = 0.0  # Initialize to 0
+
+                # ADD to existing value instead of overwriting
+                bonus_lookup[wp_type][ac_type] += total_bonus
+
                 rows_in_sheet += 1
                 total_rows_processed += 1
 
@@ -234,28 +246,37 @@ def get_bonus_hours(ac_type, wp_type, bonus_lookup):
     return bonus
 
 
-def get_bonus_breakdown_by_source(ac_type, wp_type):
+def get_bonus_breakdown_by_source(ac_type, wp_type, file_logger=None):
     """
     Get breakdown of bonus hours by source sheet.
     Only includes rows where IsActive = TRUE.
     Returns dict with detailed source information.
+
+    Args:
+        ac_type: Aircraft type code
+        wp_type: Work package type
+        file_logger: Optional file-specific logger (if None, uses module logger)
     """
     bonus_file_path = os.path.join(REFERENCE_FOLDER, BONUS_HOURS_FILE)
 
     if not os.path.exists(bonus_file_path):
         return {}
 
+    # Use provided logger or fall back to module logger
+    if file_logger is None:
+        file_logger = get_logger(module_name="a_extractor")
+
     try:
         excel_file = pd.ExcelFile(bonus_file_path, engine='openpyxl')
         breakdown = {}
 
-        logger.info("")
-        logger.info("="*80)
-        logger.info("BONUS HOURS SOURCE DETAILS")
-        logger.info("="*80)
-        logger.info(f"Looking up: ac_type='{ac_type}', wp_type='{wp_type}'")
-        logger.info(f"File: {BONUS_HOURS_FILE}")
-        logger.info("")
+        file_logger.info("")
+        file_logger.info("="*80)
+        file_logger.info("BONUS HOURS SOURCE DETAILS")
+        file_logger.info("="*80)
+        file_logger.info(f"Looking up: ac_type='{ac_type}', wp_type='{wp_type}'")
+        file_logger.info(f"File: {BONUS_HOURS_FILE}")
+        file_logger.info("")
 
         for sheet_name in excel_file.sheet_names:
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
@@ -309,31 +330,31 @@ def get_bonus_breakdown_by_source(ac_type, wp_type):
                         breakdown[sheet_name] = total_bonus
 
                         # Log detailed source information
-                        logger.info(f"Sheet: '{sheet_name}'")
-                        logger.info(f"  Row: {idx + 2}")  # +2 because Excel is 1-indexed and has header
-                        logger.info(f"  {AIRCRAFT_CODE_COLUMN}: {row_ac_type}")
-                        logger.info(f"  {PRODUCT_CODE_COLUMN}: {row_wp_type}")
+                        file_logger.info(f"Sheet: '{sheet_name}'")
+                        file_logger.info(f"  Row: {idx + 2}")  # +2 because Excel is 1-indexed and has header
+                        file_logger.info(f"  {AIRCRAFT_CODE_COLUMN}: {row_ac_type}")
+                        file_logger.info(f"  {PRODUCT_CODE_COLUMN}: {row_wp_type}")
                         if has_isactive:
-                            logger.info(f"  {BONUS_ISACTIVE_COLUMN}: {row[BONUS_ISACTIVE_COLUMN]}")
+                            file_logger.info(f"  {BONUS_ISACTIVE_COLUMN}: {row[BONUS_ISACTIVE_COLUMN]}")
                         if has_bonus_1:
-                            logger.info(f"  {BONUS_1_COLUMN}: {bonus_1_value:.2f}")
+                            file_logger.info(f"  {BONUS_1_COLUMN}: {bonus_1_value:.2f}")
                         if has_bonus_2:
-                            logger.info(f"  {BONUS_2_COLUMN}: {bonus_2_value:.2f}")
-                        logger.info(f"  → Total from this sheet: {total_bonus:.2f} hours")
+                            file_logger.info(f"  {BONUS_2_COLUMN}: {bonus_2_value:.2f}")
+                        file_logger.info(f"  → Total from this sheet: {total_bonus:.2f} hours")
                         if skipped_count > 0:
-                            logger.info(f"  Note: {skipped_count} row(s) skipped ({BONUS_ISACTIVE_COLUMN}=FALSE)")
-                        logger.info("")
+                            file_logger.info(f"  Note: {skipped_count} row(s) skipped ({BONUS_ISACTIVE_COLUMN}=FALSE)")
+                        file_logger.info("")
                     break
 
-        logger.info("="*80)
-        logger.info(f"Total Bonus Hours: {sum(breakdown.values()):.2f}")
-        logger.info("="*80)
-        logger.info("")
+        file_logger.info("="*80)
+        file_logger.info(f"Total Bonus Hours: {sum(breakdown.values()):.2f}")
+        file_logger.info("="*80)
+        file_logger.info("")
 
         return breakdown
 
     except Exception as e:
-        logger.warning(f"Could not get bonus breakdown: {e}")
+        file_logger.warning(f"Could not get bonus breakdown: {e}")
         import traceback
-        logger.debug(traceback.format_exc())
+        file_logger.debug(traceback.format_exc())
         return {}
