@@ -1,7 +1,7 @@
 """
 Excel Writer Module
 Main orchestration for Excel output generation
-FIXED: Removed debug_logger import and debug.txt generation
+UPDATED: Removed separate Special Code Distribution sheet (now integrated into Total Man-Hours Summary)
 """
 
 import os
@@ -55,17 +55,16 @@ def save_output_file(input_file_name, report_data):
     # Create Excel writer with explicit engine
     try:
         with pd.ExcelWriter(output_xlsx_path, engine='openpyxl') as writer:
-            # Sheet 1 & 2: Total Man-Hours Summary and Special Code Distribution
-            # This function now creates TWO sheets
+            # Sheet 1: Total Man-Hours Summary (now includes special code distribution)
             create_total_mhrs_sheet(writer, report_data)
 
-            # Sheet 3: High Man-Hours Tasks
+            # Sheet 2: High Man-Hours Tasks
             create_high_mhrs_sheet(writer, report_data)
 
-            # Sheet 4: New Task IDs
+            # Sheet 3: New Task IDs
             create_new_task_ids_sheet(writer, report_data)
 
-            # Sheet 5: Tool Control (if enabled)
+            # Sheet 4: Tool Control (if enabled)
             if report_data.get('enable_tool_control', False):
                 create_tool_control_sheet(writer, report_data)
 
