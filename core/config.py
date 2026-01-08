@@ -6,6 +6,7 @@ UPDATED: Removed type coefficient, added SEQ coefficient system
 
 import configparser
 import os
+import pandas as pd
 
 # Load the configuration settings from settings.ini
 config = configparser.ConfigParser()
@@ -89,6 +90,20 @@ if config.has_section('SEQ_Coefficients'):
         else:
             SEQ_COEFFICIENTS[key.upper()] = float(value)
 
+# Skip Coefficient section
+SKIP_COEFFICIENT_CODES = []
+ARRAY_SKIP_COEFFICIENT = 1.0
+
+if config.has_section('SkipCoefficient'):
+    # Load the list of task codes to skip
+    skip_codes_str = config.get('SkipCoefficient', 'skip_codes', fallback='')
+    if skip_codes_str.strip():
+        # Parse comma-separated values and strip whitespace
+        SKIP_COEFFICIENT_CODES = [code.strip() for code in skip_codes_str.split(',') if code.strip()]
+
+    # Load the coefficient to use for skipped codes
+    ARRAY_SKIP_COEFFICIENT = config.getfloat('SkipCoefficient', 'array_skip_coefficient', fallback=1.0)
+
 # Thresholds section
 HIGH_MHRS_HOURS = config.getint('Thresholds', 'high_mhrs_hours')
 RANDOM_SAMPLE_SIZE = config.getint('Thresholds', 'random_sample_size')
@@ -98,16 +113,25 @@ HOURS_PER_SHIFT = config.getint('Thresholds', 'hours_per_shift', fallback=8)
 SHOW_BONUS_HOURS_BREAKDOWN = config.getboolean('Output', 'show_bonus_hours_breakdown', fallback=True)
 
 
-def get_seq_coefficient(seq_no):
+def get_seq_coefficient(seq_no, task_id=None):
     """
     Get the coefficient for a given SEQ number.
 
     Args:
         seq_no: SEQ identifier (e.g., "2.1", "3.5", "4.2")
+        task_id: Optional task ID to check against skip list
 
     Returns:
         float: Coefficient to apply (e.g., 2.0, 1.0)
     """
+    # First check if this task code should skip coefficient
+    if task_id and SKIP_COEFFICIENT_CODES:
+        task_id_str = str(task_id).strip().upper()  # Convert to uppercase
+        for skip_code in SKIP_COEFFICIENT_CODES:
+            if skip_code.upper() in task_id_str:  # Case-insensitive comparison
+                return ARRAY_SKIP_COEFFICIENT
+
+    # Normal coefficient logic
     if pd.isna(seq_no):
         return DEFAULT_COEFFICIENT
 
@@ -159,9 +183,10 @@ def print_config():
     print(f"Show Bonus Hours Breakdown: {SHOW_BONUS_HOURS_BREAKDOWN}")
     print(f"SEQ Mappings: {SEQ_MAPPINGS}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
+    print(f"Skip Coefficient Codes: {SKIP_COEFFICIENT_CODES}")
     print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")
+    print(f"Array Skip Coefficient: {ARRAY_SKIP_COEFFICIENT}")
     print(f"Default Coefficient: {DEFAULT_COEFFICIENT}")
 
 
-# Import pandas for isna check
-import pandas as pd
+

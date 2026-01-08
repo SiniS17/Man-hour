@@ -19,7 +19,7 @@ from core.config import (
     SEQ_NO_COLUMN,
     SPECIAL_CODE_COLUMN,
     TITLE_COLUMN,
-    get_seq_coefficient,
+    get_seq_coefficient, SKIP_COEFFICIENT_CODES, ARRAY_SKIP_COEFFICIENT,
 )
 from core.data_loader import extract_workpack_dates, load_input_dataframe
 from core.id_extractor import extract_task_id
@@ -48,25 +48,35 @@ def apply_seq_coefficients(df):
     Apply SEQ-based coefficients to base hours.
 
     Args:
-        df: DataFrame with 'Base Hours' column
+        df: DataFrame with 'Base Hours' and 'Task ID' columns
 
     Returns:
         DataFrame: Updated DataFrame with 'Coefficient' and 'Adjusted Hours' columns
     """
     logger = get_logger(module_name="data_processor")
 
-    # Apply coefficient based on SEQ number
-    df['Coefficient'] = df[SEQ_NO_COLUMN].apply(get_seq_coefficient)
+    # Apply coefficient based on SEQ number AND task ID
+    df['Coefficient'] = df.apply(
+        lambda row: get_seq_coefficient(row[SEQ_NO_COLUMN], row.get('Task ID')),
+        axis=1
+    )
 
     # Calculate adjusted hours
     df['Adjusted Hours'] = df['Base Hours'] * df['Coefficient']
 
     logger.info("SEQ COEFFICIENT APPLICATION")
-    logger.info("-"*80)
+    logger.info("-" * 80)
     logger.info("Coefficient Distribution:")
     coeff_counts = df['Coefficient'].value_counts().sort_index()
     for coeff, count in coeff_counts.items():
         logger.info(f"  {coeff:.2f}: {count} rows")
+
+    # Log if any coefficients were skipped
+    if SKIP_COEFFICIENT_CODES:
+        skip_count = len(df[df['Coefficient'] == ARRAY_SKIP_COEFFICIENT])
+        if skip_count > 0:
+            logger.info(f"  Skipped coefficient for {skip_count} rows (matched skip codes)")
+
     logger.info("")
 
     return df

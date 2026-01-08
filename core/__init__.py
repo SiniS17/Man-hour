@@ -50,6 +50,8 @@ __all__ = [
     'REFERENCE_EO_PREFIX',
     'get_seq_coefficient',
     'print_config',
+    'SKIP_COEFFICIENT_CODES',
+    'ARRAY_SKIP_COEFFICIENT',
 
     # Data loader exports
     'load_input_files',
