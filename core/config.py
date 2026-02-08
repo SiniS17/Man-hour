@@ -1,7 +1,7 @@
 """
 Configuration Module
 Loads and manages all configuration settings from settings.ini
-UPDATED: Removed type coefficient, added SEQ coefficient system
+UPDATED: Removed type coefficient, added SEQ coefficient system, added TOOL_PERCENTAGE_COLUMN
 """
 
 import configparser
@@ -65,6 +65,7 @@ TOOL_TYPE_COLUMN = None
 TOOL_PARTNO_COLUMN = None
 TOTAL_QTY_COLUMN = None
 ALT_QTY_COLUMN = None
+TOOL_PERCENTAGE_COLUMN = None
 
 if config.has_section('ToolControlColumns'):
     TOOL_NAME_COLUMN = config['ToolControlColumns']['tool_name']
@@ -72,6 +73,7 @@ if config.has_section('ToolControlColumns'):
     TOOL_PARTNO_COLUMN = config['ToolControlColumns']['tool_partno']
     TOTAL_QTY_COLUMN = config['ToolControlColumns']['total_qty']
     ALT_QTY_COLUMN = config['ToolControlColumns']['alt_qty']
+    TOOL_PERCENTAGE_COLUMN = config.get('ToolControlColumns', 'tool_percentage', fallback='prq2.percentage')
 
 # SEQ Mappings section
 SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings')}
@@ -177,6 +179,7 @@ def print_config():
         print(f"Tool Part No Column: {TOOL_PARTNO_COLUMN}")
         print(f"Total Qty Column: {TOTAL_QTY_COLUMN}")
         print(f"Alt Qty Column: {ALT_QTY_COLUMN}")
+        print(f"Tool Percentage Column: {TOOL_PERCENTAGE_COLUMN}")
     print(f"High Mhrs Threshold: {HIGH_MHRS_HOURS}")
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
     print(f"Hours per Shift: {HOURS_PER_SHIFT}")
@@ -187,6 +190,3 @@ def print_config():
     print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")
     print(f"Array Skip Coefficient: {ARRAY_SKIP_COEFFICIENT}")
     print(f"Default Coefficient: {DEFAULT_COEFFICIENT}")
-
-
-

@@ -1,6 +1,7 @@
 """
 Tool Control Sheet Module
 FIXED: Added red highlighting for blank SEQ rows
+UPDATED: Added percentage column support
 """
 
 import pandas as pd
@@ -11,6 +12,7 @@ def create_tool_control_sheet(writer, report_data):
     """
     Create the Tool Control sheet showing tools/spares with zero availability.
     FIXED: Added red highlighting for blank SEQ rows.
+    UPDATED: Now includes percentage column if available.
     """
     tool_issues_df = report_data.get('tool_control_issues', pd.DataFrame())
 
@@ -74,7 +76,8 @@ def adjust_column_widths(writer, sheet_name, df):
         'Part Number': 25,
         'Task ID': 30,
         'SEQ': 20,
-        'Type': 20
+        'Type': 20,
+        'Percentage': 15
     }
 
     for idx, col in enumerate(df.columns):

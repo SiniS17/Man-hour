@@ -1,6 +1,7 @@
 """
 Tool Control Module - Separate from man-hour calculations
 REFACTORED: Now uses centralized logging system
+UPDATED: Added percentage column support
 """
 
 import pandas as pd
@@ -8,7 +9,7 @@ import os
 from utils.logger import get_logger
 from core.config import (SEQ_NO_COLUMN, TITLE_COLUMN,
                          TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
-                         TOTAL_QTY_COLUMN, ALT_QTY_COLUMN, config)
+                         TOTAL_QTY_COLUMN, ALT_QTY_COLUMN, TOOL_PERCENTAGE_COLUMN, config)
 
 # Get module-specific logger
 logger = get_logger(module_name="tool_control")
@@ -130,7 +131,7 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
         seq_id_mappings: SEQ ID extraction configuration
 
     Returns:
-        DataFrame with columns: SEQ, Task ID, Part Number, Tool/Spare Name, Type
+        DataFrame with columns: SEQ, Task ID, Part Number, Tool/Spare Name, Type, Percentage
     """
     # Validate required columns exist
     if not all([TOOL_NAME_COLUMN, TOOL_TYPE_COLUMN, TOOL_PARTNO_COLUMN,
@@ -222,10 +223,21 @@ def check_tool_availability(df, seq_mappings, seq_id_mappings):
 
     zero_qty_items['Type'] = zero_qty_items[TOOL_TYPE_COLUMN].apply(map_tool_type)
 
+    # Extract percentage column if available
+    columns_to_select = [SEQ_NO_COLUMN, 'Task ID', TOOL_PARTNO_COLUMN, TOOL_NAME_COLUMN, 'Type']
+    column_names = ['SEQ', 'Task ID', 'Part Number', 'Tool/Spare Name', 'Type']
+    
+    if TOOL_PERCENTAGE_COLUMN and TOOL_PERCENTAGE_COLUMN in zero_qty_items.columns:
+        columns_to_select.append(TOOL_PERCENTAGE_COLUMN)
+        column_names.append('Percentage')
+        logger.info(f"Including percentage column: {TOOL_PERCENTAGE_COLUMN}")
+    else:
+        if TOOL_PERCENTAGE_COLUMN:
+            logger.warning(f"Percentage column '{TOOL_PERCENTAGE_COLUMN}' not found in input file")
+
     # Select and rename columns
-    result = zero_qty_items[[SEQ_NO_COLUMN, 'Task ID', TOOL_PARTNO_COLUMN,
-                             TOOL_NAME_COLUMN, 'Type']].copy()
-    result.columns = ['SEQ', 'Task ID', 'Part Number', 'Tool/Spare Name', 'Type']
+    result = zero_qty_items[columns_to_select].copy()
+    result.columns = column_names
 
     # Reset index
     result = result.reset_index(drop=True)
