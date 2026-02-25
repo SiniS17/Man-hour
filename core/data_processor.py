@@ -171,7 +171,7 @@ def process_data(input_file_path, reference_data):
     df_processed = df[df['Should Process'] == True].copy()
 
     # Deduplicate by SEQ (keep first occurrence)
-    df_processed = df_processed.drop_duplicates(subset=[SEQ_NO_COLUMN], keep='first')
+    df_processed = df_processed.drop_duplicates(subset=['event'], keep='first')
 
     logger.info("AFTER DEDUPLICATION")
     logger.info("-"*80)

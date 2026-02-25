@@ -100,7 +100,7 @@ def adjust_column_widths(writer, sheet_name, df, max_width=50):
 
     for idx, col in enumerate(df.columns):
         max_length = max(
-            df[col].astype(str).apply(len).max(),
+            df[col].fillna('').astype(str).apply(len).max(),
             len(str(col))
         )
         worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, max_width)
