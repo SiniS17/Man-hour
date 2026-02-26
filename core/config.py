@@ -1,7 +1,7 @@
 """
 Configuration Module
 Loads and manages all configuration settings from settings.ini
-UPDATED: Removed type coefficient, added SEQ coefficient system, added TOOL_PERCENTAGE_COLUMN
+UPDATED: Added per-sheet SEQ mapping overrides (SEQ_MHR_Mappings, SEQ_NewTask_Mappings, SEQ_ToolControl_Mappings)
 """
 
 import configparser
@@ -75,13 +75,52 @@ if config.has_section('ToolControlColumns'):
     ALT_QTY_COLUMN = config['ToolControlColumns']['alt_qty']
     TOOL_PERCENTAGE_COLUMN = config.get('ToolControlColumns', 'tool_percentage', fallback='prq2.percentage')
 
-# SEQ Mappings section
+# ─────────────────────────────────────────────────────────────────────────────
+# Base SEQ Mappings (used as default for all sheets)
+# ─────────────────────────────────────────────────────────────────────────────
 SEQ_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_Mappings')}
 
 # SEQ ID Mappings section
 SEQ_ID_MAPPINGS = {key.upper(): value for key, value in config.items('SEQ_ID_Mappings')}
 
-# SEQ Coefficients section
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-sheet SEQ override mappings
+# Each resolves to a merged dict: base SEQ_MAPPINGS overridden by sheet-specific keys.
+# Only "ignore" / "true" / "false" values are recognised (same as base mappings).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_sheet_seq_mapping(section_name):
+    """
+    Build a merged SEQ mapping for a specific output sheet.
+    Starts from the base SEQ_MAPPINGS and applies per-sheet overrides.
+
+    Args:
+        section_name: INI section name, e.g. 'SEQ_MHR_Mappings'
+
+    Returns:
+        dict: Merged mapping {SEQ_KEY_UPPER: 'true'|'false'|'ignore'}
+    """
+    merged = dict(SEQ_MAPPINGS)  # copy base
+    if config.has_section(section_name):
+        # config.items() includes DEFAULT keys — use config.options() minus defaults
+        default_keys = set(config.defaults().keys())
+        overrides = {
+            key.upper(): value
+            for key, value in config.items(section_name)
+            if key not in default_keys
+        }
+        merged.update(overrides)
+    return merged
+
+
+# Resolved per-sheet mappings (available for import by other modules)
+SEQ_MHR_MAPPINGS      = _build_sheet_seq_mapping('SEQ_MHR_Mappings')
+SEQ_NEWTASK_MAPPINGS  = _build_sheet_seq_mapping('SEQ_NewTask_Mappings')
+SEQ_TOOL_MAPPINGS     = _build_sheet_seq_mapping('SEQ_ToolControl_Mappings')
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SEQ Coefficients
+# ─────────────────────────────────────────────────────────────────────────────
 SEQ_COEFFICIENTS = {}
 DEFAULT_COEFFICIENT = 1.0
 
@@ -97,13 +136,9 @@ SKIP_COEFFICIENT_CODES = []
 ARRAY_SKIP_COEFFICIENT = 1.0
 
 if config.has_section('SkipCoefficient'):
-    # Load the list of task codes to skip
     skip_codes_str = config.get('SkipCoefficient', 'skip_codes', fallback='')
     if skip_codes_str.strip():
-        # Parse comma-separated values and strip whitespace
         SKIP_COEFFICIENT_CODES = [code.strip() for code in skip_codes_str.split(',') if code.strip()]
-
-    # Load the coefficient to use for skipped codes
     ARRAY_SKIP_COEFFICIENT = config.getfloat('SkipCoefficient', 'array_skip_coefficient', fallback=1.0)
 
 # Thresholds section
@@ -124,16 +159,14 @@ def get_seq_coefficient(seq_no, task_id=None):
         task_id: Optional task ID to check against skip list
 
     Returns:
-        float: Coefficient to apply (e.g., 2.0, 1.0)
+        float: Coefficient to apply
     """
-    # First check if this task code should skip coefficient
     if task_id and SKIP_COEFFICIENT_CODES:
-        task_id_str = str(task_id).strip().upper()  # Convert to uppercase
+        task_id_str = str(task_id).strip().upper()
         for skip_code in SKIP_COEFFICIENT_CODES:
-            if skip_code.upper() in task_id_str:  # Case-insensitive comparison
+            if skip_code.upper() in task_id_str:
                 return ARRAY_SKIP_COEFFICIENT
 
-    # Normal coefficient logic
     if pd.isna(seq_no):
         return DEFAULT_COEFFICIENT
 
@@ -144,10 +177,28 @@ def get_seq_coefficient(seq_no, task_id=None):
     return SEQ_COEFFICIENTS.get(mapping_key, DEFAULT_COEFFICIENT)
 
 
+def should_process_for_sheet(seq_no, sheet_mapping):
+    """
+    Determine whether a row with the given SEQ should be included for a
+    specific output sheet, based on its resolved per-sheet mapping.
+
+    Args:
+        seq_no: SEQ identifier (e.g., "2.1", "10.3")
+        sheet_mapping: One of SEQ_MHR_MAPPINGS / SEQ_NEWTASK_MAPPINGS / SEQ_TOOL_MAPPINGS
+
+    Returns:
+        bool: True if the row should be included, False if it should be ignored
+    """
+    if pd.isna(seq_no):
+        return False
+    seq_prefix = str(seq_no).split('.')[0]
+    mapping_key = f"SEQ_{seq_prefix}.X"
+    value = sheet_mapping.get(mapping_key, 'true')
+    return value != 'ignore'
+
+
 def print_config():
-    """
-    Display the configuration (for debugging purposes).
-    """
+    """Display the configuration (for debugging purposes)."""
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Reference file: {REFERENCE_FILE}")
@@ -184,7 +235,10 @@ def print_config():
     print(f"Random Sample Size: {RANDOM_SAMPLE_SIZE}")
     print(f"Hours per Shift: {HOURS_PER_SHIFT}")
     print(f"Show Bonus Hours Breakdown: {SHOW_BONUS_HOURS_BREAKDOWN}")
-    print(f"SEQ Mappings: {SEQ_MAPPINGS}")
+    print(f"Base SEQ Mappings: {SEQ_MAPPINGS}")
+    print(f"MHR SEQ Mappings (effective): {SEQ_MHR_MAPPINGS}")
+    print(f"New Task SEQ Mappings (effective): {SEQ_NEWTASK_MAPPINGS}")
+    print(f"Tool Control SEQ Mappings (effective): {SEQ_TOOL_MAPPINGS}")
     print(f"SEQ ID Mappings: {SEQ_ID_MAPPINGS}")
     print(f"Skip Coefficient Codes: {SKIP_COEFFICIENT_CODES}")
     print(f"SEQ Coefficients: {SEQ_COEFFICIENTS}")

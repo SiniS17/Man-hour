@@ -1,7 +1,7 @@
 """
 Core Package
 Contains core business logic for data processing
-UPDATED: Removed type coefficient exports
+UPDATED: Added per-sheet SEQ mapping exports (SEQ_MHR_MAPPINGS, SEQ_NEWTASK_MAPPINGS, SEQ_TOOL_MAPPINGS)
 """
 
 from .config import *
@@ -36,8 +36,14 @@ __all__ = [
     'BONUS_2_COLUMN',
     'BONUS_ISACTIVE_COLUMN',
     'SHOW_BONUS_HOURS_BREAKDOWN',
+    # Base mapping
     'SEQ_MAPPINGS',
     'SEQ_ID_MAPPINGS',
+    # Per-sheet mappings
+    'SEQ_MHR_MAPPINGS',
+    'SEQ_NEWTASK_MAPPINGS',
+    'SEQ_TOOL_MAPPINGS',
+    # Coefficients
     'SEQ_COEFFICIENTS',
     'DEFAULT_COEFFICIENT',
     'HIGH_MHRS_HOURS',
@@ -49,6 +55,7 @@ __all__ = [
     'REFERENCE_EO_ID_COLUMN',
     'REFERENCE_EO_PREFIX',
     'get_seq_coefficient',
+    'should_process_for_sheet',
     'print_config',
     'SKIP_COEFFICIENT_CODES',
     'ARRAY_SKIP_COEFFICIENT',
